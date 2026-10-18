@@ -1,270 +1,250 @@
 <div align="center">
 
-<img src="assets/icon-connector.png" width="96" alt="PC Commander icon">
+<img src="assets/docs/banner.png" alt="PC Commander" width="100%">
 
-# PC Commander
+<br>
 
-**Run commands on your own PC straight from ChatGPT — over your own private HTTPS URL, with a one-click approval on your machine.**
+![Platform](https://img.shields.io/badge/Your%20PC-Windows-0ea5e9?style=flat-square)
+![Works with](https://img.shields.io/badge/Works%20with-ChatGPT-6366f1?style=flat-square)
+![Setup](https://img.shields.io/badge/Setup-about%2010%20min-22c55e?style=flat-square)
+![License](https://img.shields.io/badge/License-MIT-a855f7?style=flat-square)
 
-Ask ChatGPT *"is Python installed on my device?"* or *"what's eating my disk?"* and it actually checks **your** computer and answers — no copy‑pasting commands into a terminal.
-
-<img src="assets/docs/architecture.png" width="860" alt="How PC Commander works">
+### Ask ChatGPT to do something on your computer, and it actually does it — after you tap **Approve**.
 
 </div>
 
 ---
 
-## Contents
+## 👋 What is this, in plain words?
 
-- [What it is](#what-it-is)
-- [Requirements](#requirements)
-- [1 · Install (2 minutes)](#1--install-2-minutes)
-- [2 · Put it online](#2--put-it-online)
-  - [Option A — temporary URL (just trying it)](#option-a--temporary-url-just-trying-it)
-  - [Option B — permanent URL on your own domain](#option-b--permanent-url-on-your-own-domain-recommended)
-- [3 · Add it to ChatGPT](#3--add-it-to-chatgpt)
-- [4 · Make ChatGPT always use it (and stay in Chat)](#4--make-chatgpt-always-use-it-and-stay-in-chat)
-- [The settings page (Ask vs Always‑allow)](#the-settings-page-ask-vs-always-allow)
-- [Your key](#your-key)
-- [Security](#security)
-- [Troubleshooting](#troubleshooting)
-- [How it's built](#how-its-built)
+You know how ChatGPT can *tell* you how to do things on your computer, but can't actually **do** them? This fixes that.
+
+**PC Commander is like a remote control for your PC that ChatGPT can use — except you're always holding the "Approve" button.**
+
+Ask ChatGPT *"is Python installed on my computer?"* and instead of guessing, it checks **your** PC and tells you the real answer. Ask it to *"clean up my Downloads folder"* and it does — right after a little box pops up on your screen and you click **Approve**.
+
+Nothing ever happens on your computer unless **you** allow it.
+
+<div align="center">
+<img src="assets/docs/steps.png" alt="Three simple steps: you ask, you approve, you get the answer" width="92%">
+</div>
 
 ---
 
-## What it is
+## 💡 Things you can ask it
 
-A tiny self‑hosted **MCP connector**. It runs a small Node server on your PC that exposes **one tool — `run_command`** — which runs PowerShell and returns the output. You add it to ChatGPT as a **custom connector**, and from then on ChatGPT can act on your machine.
+Once it's set up, just chat normally. For example:
 
-The important part: **nothing runs without your say‑so.** Every command pops an **Approve / Deny** dialog on your own screen (you can switch to "always allow" when you want it hands‑off). The server only listens on `127.0.0.1`; the outside world reaches it **only** through a Cloudflare tunnel you control, and only with your secret key.
+- *"Is Python (or Node, or Git) installed on my PC?"*
+- *"What's taking up all the space on my hard drive?"*
+- *"Clean up my Downloads folder — delete anything older than a month."*
+- *"What's my computer's IP address and Windows version?"*
+- *"Make a folder on my Desktop called Taxes and move all my PDFs into it."*
+- *"Is my laptop running hot? What's using the most memory right now?"*
 
-> **Platform:** the controlled machine must be **Windows** (it uses PowerShell). You can *drive* it from ChatGPT on any device — phone, Mac, web.
-
-**Highlights**
-
-- 🔒 **Approval gate** — a click on your PC is the real security boundary, even if the key leaks.
-- 🌐 **Permanent URL** — your own `pc.yourdomain.com` that never changes, via a free Cloudflare tunnel. No open ports, no port‑forwarding.
-- ⚡ **Auto‑start** — launches silently at every logon; survives sleep/wake.
-- 🎚️ **Live mode toggle** — flip Ask ↔ Always‑allow from a local web page, anytime.
-- 🧩 **No third‑party relay** — unlike hosted alternatives, your commands go through *your* domain and *your* server only.
+It can do basically anything you could type into your PC yourself — you just approve it first.
 
 ---
 
-## Requirements
+## ✅ What you'll need
 
-- **Windows 10/11** (the PC you want to control).
-- **[Node.js](https://nodejs.org) 20+** (LTS is fine).
-- For the permanent URL: a domain whose DNS is on **[Cloudflare](https://dash.cloudflare.com)** (free plan works) and **[cloudflared](https://github.com/cloudflare/cloudflared/releases)** (the setup script can install it for you).
-- A ChatGPT account that can add **custom connectors** (custom MCP servers).
+| | |
+|---|---|
+| 🖥️ **A Windows PC** | The computer you want to control. (You can *talk* to it from your phone or a Mac — but the computer being controlled has to be Windows.) |
+| ⏱️ **About 10 minutes** | One-time setup. After that it runs by itself. |
+| 💬 **A ChatGPT account** | One that lets you add "connectors" (a connector is just a plug-in that lets ChatGPT talk to your PC). |
+| 🌐 **A website address you own** *(optional)* | If you have one (like `yourname.com`), you get a permanent link that never changes. No domain? You can still use the free temporary option. |
+
+> **Never set anything like this up before?** That's fine. Every step below is copy‑paste. You don't need to understand the commands — just follow along.
 
 ---
 
-## 1 · Install (2 minutes)
+## 🚀 Setting it up
+
+> **How to open "PowerShell"** (you'll need it below): press the **Start** button, type **PowerShell**, and press **Enter**. A blue window opens. That's where you paste the commands.
+
+### Step 1 — Get the files onto your PC
+
+In PowerShell, paste this and press Enter:
 
 ```powershell
 git clone https://github.com/Lucifer-xD/pc-commander.git
 cd pc-commander
+```
+
+<sub>💡 If it says "git is not recognized", install **[Git](https://git-scm.com/download/win)** first (click Next through the installer), then try again. You'll also need **[Node.js](https://nodejs.org)** — download the big green "LTS" button and install it.</sub>
+
+### Step 2 — Run the installer
+
+Paste this:
+
+```powershell
 powershell -ExecutionPolicy Bypass -File scripts\install.ps1
 ```
 
-The installer:
+This sets everything up and makes it **start automatically every time you turn your PC on**. When it finishes, it prints a link ending in a long code — that long code is **your private key**. Keep that window open for the next step.
 
-1. installs dependencies,
-2. generates your **private key** (`data\token.txt`),
-3. sets the server to **auto‑start at every logon** (a shortcut in your Startup folder — no admin needed),
-4. starts it now and prints your **local settings URL**.
+### Step 3 — Get your link
 
-You'll see something like:
+ChatGPT needs a web address to reach your PC. Pick one:
 
-```
-Settings page (change Ask / Always-allow):
-  http://127.0.0.1:8787/?key=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-```
+<table>
+<tr>
+<td width="50%" valign="top">
 
-Keep that key handy — it's the same key used in your ChatGPT URL below.
-
----
-
-## 2 · Put it online
-
-ChatGPT lives on the internet, so it needs a public HTTPS URL that forwards to your PC. Pick one:
-
-### Option A — temporary URL (just trying it)
+**🅰️ Just trying it out?**
 
 ```powershell
 npm run quick
 ```
 
-This opens a free tunnel and prints a ready‑to‑paste URL like
-`https://abcd1234.lhr.life/mcp?key=...`. Good for a first test. **The URL changes every run**, so it's not for daily use — leave the window open while you use it.
+Gives you a **temporary** link right away. Good for a first test. (The link changes each time, so it's not for everyday use.)
 
-### Option B — permanent URL on your own domain (recommended)
+</td>
+<td width="50%" valign="top">
 
-One command, using your Cloudflare domain:
+**🅱️ Want it permanent? (recommended)**
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts\setup-domain.ps1 -Hostname pc.yourdomain.com
 ```
 
-It logs cloudflared into your Cloudflare account (a browser opens once), creates a **named tunnel**, points `pc.yourdomain.com` at it, writes the config, **auto‑starts the tunnel at logon**, and prints your **permanent URL**:
+Uses a website address you own to make a **permanent link that never changes**. A browser opens once to sign in — just follow the prompts.
+
+</td>
+</tr>
+</table>
+
+Either way, you'll get a link that looks like this — **copy it**, you'll paste it into ChatGPT next:
 
 ```
-Paste THIS into ChatGPT as the connector URL:
-  https://pc.yourdomain.com/mcp?key=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+https://pc.yourdomain.com/mcp?key=your-long-private-code
 ```
 
-This URL **never changes again** — paste it into ChatGPT once and you're done forever.
+### Step 4 — Connect it to ChatGPT
 
-<details>
-<summary>Prefer to do it by hand? (click)</summary>
+1. Go to **chatgpt.com** → click your name → **Settings** → **Connectors**.
+2. Click **Add custom connector** (you may first need to turn on *Advanced → Developer mode*).
+3. Fill in the boxes:
 
-```powershell
-cloudflared tunnel login                       # authorize your domain
-cloudflared tunnel create pc-commands           # note the UUID it prints
-cloudflared tunnel route dns pc-commands pc.yourdomain.com
-# copy cloudflared\pc-commands.example.yml to cloudflared\pc-commands.yml,
-# fill in the UUID / credentials path / hostname, then:
-cloudflared tunnel --config cloudflared\pc-commands.yml run
-```
-Add `protocol: http2` in the yml if your network blocks QUIC (common on office/mobile Wi‑Fi).
-</details>
-
-> **Tip:** test any time with `curl https://pc.yourdomain.com/health` → `{"ok":true,...}`.
-
----
-
-## 3 · Add it to ChatGPT
-
-> Custom connectors are added on the **web** (`chatgpt.com`); once added they're available to your account. You may need **Settings → Connectors → Advanced → Developer mode** turned on to add a custom one.
-
-1. **Settings → Connectors → Add custom connector** (a.k.a. *Add custom MCP server*).
-2. Fill in:
-
-   | Field | Value |
+   | Box | What to put |
    |---|---|
    | **Name** | `PC Commander` |
-   | **Description** | `Securely run commands on my own Windows PC through a private, self-hosted bridge. Every command is gated by an on-device approval prompt (toggleable to auto-allow).` |
-   | **MCP Server URL** | `https://pc.yourdomain.com/mcp?key=YOUR_KEY` |
-   | **Authentication** | **No authentication** *(the `?key=` in the URL is the auth)* |
-   | **Icon** | `assets/icon-connector.png` (in this repo) |
+   | **Description** | `Securely run things on my own Windows PC. I approve each action.` |
+   | **URL** | the link you copied in Step 3 |
+   | **Authentication** | choose **No authentication** *(your key is already in the link)* |
+   | **Icon** | pick the file `assets/icon-connector.png` from this folder |
 
-3. Check "I trust this application" → **Create**.
-4. In a new chat, open the **`+` / tools menu** and make sure **PC Commander** is toggled **on**.
-5. Ask it something: *"using PC Commander, what's my Windows version?"* → an **Approve** box appears on your PC → click it → the answer comes back in chat. 🎉
+4. Tick **"I trust this application"** and click **Create**.
+5. Start a **new chat**, click the **➕** near the message box, and make sure **PC Commander** is switched **on**.
 
----
+🎉 **Try it:** type *"using PC Commander, what's my Windows version?"* — a box pops up on your PC, you click **Approve**, and the answer appears in the chat.
 
-## 4 · Make ChatGPT always use it (and stay in Chat)
+### Step 5 — Make ChatGPT use it automatically
 
-By default ChatGPT may try to push you into **Work/Agent mode** for "device" tasks. To make it just use the connector in the **Chat** tab without being told each time, add a standing instruction.
+So you don't have to say "use PC Commander" every time, give ChatGPT a standing instruction.
 
-**On the web:** *Settings → Personalization → Custom Instructions* → **"How would you like ChatGPT to respond?"**
-**In the desktop app:** *Settings → Personalization → Custom instructions → Codex instructions* (this edits the `AGENTS.md` file for the machine).
+Go to **Settings → Personalization → Custom Instructions**, and in the box that says *"How would you like ChatGPT to respond?"*, paste this:
 
-Paste this into **both** (instructions don't carry between the web and the app):
-
-```markdown
-# My machine & PC Commander
-
-I have a connector called **PC Commander** with a `run_command` tool
-that runs PowerShell on my own Windows PC. It is authorized by me, and
-every command is gated by my own approval (or auto-allowed when I choose).
-I am fully able to act on my device through it.
-
-Always follow these rules:
-- For ANY request about my PC / computer / laptop / device / "this machine"
-  — is X installed, run a command or script, read/list/edit files, git,
-  builds, tests, system info, install or launch apps — call PC Commander's
-  `run_command` tool and report the result, here in Chat.
-- NEVER suggest, offer, or switch me to "ChatGPT Work", Agent mode, or
-  Tasks. Stay in Chat. If a "Continue in Work" card appears, ignore it and
-  use PC Commander instead.
-- NEVER tell me to open a terminal and run things myself, and never say you
-  can't reach my device — you can, via PC Commander.
-- Don't ask me to confirm in chat; the local approval prompt handles that.
+```text
+I have a connector called PC Commander that runs things on my own Windows PC.
+Whenever I ask about my PC / computer / laptop — checking if something is
+installed, running something, finding or tidying files, system info, and so on
+— use PC Commander directly and tell me the result, right here in the chat.
+Don't tell me to do it myself, and don't switch me to "Work" or "Agent" mode —
+stay in the normal chat. Every action already asks me to approve it on my PC.
 ```
 
-If a **"Continue in Work"** card still pops up on the first turn, click **Stay in Chat**. Tagging **`@PC Commander`** at the start of a message forces it 100% of the time.
+<sub>📱 **Using the ChatGPT desktop app too?** Do the same thing there under *Settings → Personalization → Custom instructions*. The app and the website remember these separately, so paste it in both.</sub>
+
+**That's it — you're done.** From now on, just ask ChatGPT about your computer and it'll handle it.
 
 ---
 
-## The settings page (Ask vs Always‑allow)
+## 🎚️ How careful should it be?
 
-Open `http://127.0.0.1:8787/?key=YOUR_KEY` on the PC (the installer also drops a shortcut). Flip the mode live — it takes effect on the very next command.
+You decide how much it asks before doing things. Open the settings page (the installer put a shortcut on your Desktop, or use the `http://127.0.0.1:8787/...` link from Step 2):
 
-<div align="center"><img src="assets/docs/settings.png" width="420" alt="PC Commander settings page"></div>
+<div align="center"><img src="assets/docs/settings.png" alt="The settings page" width="380"></div>
 
-- **Ask each time** — a dialog pops on your PC for every command; you click **Approve**. (If you don't click in ~55 s it's treated as declined and the command does **not** run.)
-- **Always allow** — commands run immediately, no prompt. Faster and fully hands‑off, but **anything** ChatGPT sends will run. Use it when you trust the session.
+- **Ask each time** *(safest, recommended)* — a box pops up for every single action and waits for your **Approve**. Nothing runs until you click.
+- **Always allow** *(hands-off)* — things run instantly with no pop-up. Faster, but it will do **whatever** ChatGPT asks. Only use this when you're watching.
 
-The page also shows your recent commands and how each was decided (auto / approved / denied).
+You can switch between them anytime, and it takes effect on the very next request.
 
-### Two permission layers
+<details>
+<summary><b>One more thing: ChatGPT might also ask its own "allow?" question</b></summary>
 
-There are **two** places that can ask before a command runs — know the difference:
+<br>
 
-1. **PC Commander's own gate** (this settings page, above) — the Approve dialog on your PC. This is the real security boundary and works no matter which ChatGPT surface you use.
-2. **ChatGPT's connector permission** — ChatGPT may also ask *"allow PC Commander to run this?"* before it even calls the tool:
-   - **Web:** it prompts the first time; choose **Always allow** for the connector to stop being asked.
-   - **Desktop app:** *Settings → Personalization → Permissions → **Custom rules*** lets you set the connector/command actions to run **without asking** (or to keep requiring approval). Set it to *without asking* if you want ChatGPT to stop prompting — PC Commander's own gate still protects you.
+There are two separate "are you sure?" checks, and that's on purpose:
 
-> Want it fully hands‑off? Set **Always allow** on this page **and** the ChatGPT‑side permission to *without asking*. Want maximum safety? Leave both on **Ask**.
+1. **Your PC's pop-up** (the one above) — the main safety net. Always protects you.
+2. **ChatGPT's own prompt** — the first time, ChatGPT may ask *"allow PC Commander to run this?"*. Choose **Always allow** there to stop being asked. (On the desktop app this lives under *Settings → Personalization → Permissions → Custom rules*.)
 
----
+**Want zero interruptions?** Set both to allow. **Want maximum safety?** Leave both on ask.
 
-## Your key
-
-- It's a random 48‑char token in `data\token.txt`, generated on first run. It's your password — **anyone with the full URL can reach your PC** (still gated by the Approve prompt while in "Ask" mode).
-- **Never commit it or post it publicly.** It's gitignored here.
-- **Rotate it** anytime: delete `data\token.txt`, restart the server (a new one is generated), and update the URL in your ChatGPT connector.
+</details>
 
 ---
 
-## Security
+## 🔐 Is this safe?
 
-- The Node server binds to **`127.0.0.1` only** — it is never directly exposed. The Cloudflare tunnel is the sole way in, and it requires your key.
-- The **Approve dialog is the real boundary.** Even if your key leaks, nothing executes until someone clicks Approve on your physical screen — unless you deliberately set "Always allow".
-- Everything is logged to `logs\connector.log` (requests, decisions, results).
-- This tool gives ChatGPT real power over your machine. Keep "Ask" mode on unless you're actively supervising, and treat "Always allow" like handing over your keyboard.
+Yes — and here's why, in plain terms:
+
+- **You approve everything.** Even if someone somehow got your link, nothing would run on your PC until *you* clicked Approve on your own screen.
+- **Only you have the link.** It contains a long secret code. Don't share it or post it anywhere, and you're the only one who can get in.
+- **It's your computer, your rules.** It only listens to your private link — it's not open to the internet, and there are no doors left unlocked.
+- **Everything is written down.** Every request and your decision is saved in a log file on your PC, so you can always see what happened.
+
+> Think of **"Always allow"** like handing someone your keyboard — only turn it on when you're paying attention. The rest of the time, keep **"Ask each time"** on.
 
 ---
 
-## Troubleshooting
+## ❓ It's not working — help
 
-| Symptom | Fix |
+| What you're seeing | What to do |
 |---|---|
-| ChatGPT says *"handoff was declined"* | You didn't click **Approve** in time (or denied it). Approve faster, or switch to **Always allow** on the settings page. |
-| It keeps offering **"Continue in Work"** | Make sure the connector is toggled **on** in the chat's `+` menu, add the custom instruction above, and click **Stay in Chat**. |
-| `health` works but `/mcp` is 401 | The `?key=` in your URL doesn't match `data\token.txt`. Copy it again from the settings line. |
-| Tunnel won't connect / QUIC errors | Add `protocol: http2` to `cloudflared\pc-commands.yml` and restart the tunnel. |
-| Nothing starts after reboot | Check the two shortcuts in `shell:startup` (`PC Commander Server` / `PC Commander Tunnel`). Node and cloudflared must be on your PATH. |
-| `cloudflared` not found | `winget install --id Cloudflare.cloudflared`, then reopen PowerShell. |
+| ChatGPT says *"handoff was declined"* | You didn't click **Approve** in time (it waits about a minute). Try again and click it, or switch to **Always allow**. |
+| It keeps saying *"Continue in Work"* | Make sure **PC Commander** is switched on in the ➕ menu, add the Step 5 instruction, and click **"Stay in Chat"**. Tip: starting your message with **@PC Commander** forces it. |
+| *"git is not recognized"* / *"node is not recognized"* | Install **[Git](https://git-scm.com/download/win)** and **[Node.js](https://nodejs.org)**, then close and reopen PowerShell. |
+| Nothing works after I restarted my PC | It should start on its own. If not, press **Start**, type `shell:startup`, Enter — you should see **PC Commander** shortcuts there. |
+| I want a new secret code | Delete the file `data\token.txt`, restart your PC, and update the link in ChatGPT with the new one. |
+
+Still stuck? [Open an issue](https://github.com/Lucifer-xD/pc-commander/issues) and describe what happened.
 
 ---
 
-## How it's built
+<details>
+<summary><b>🧩 For developers (the technical bits)</b></summary>
+
+<br>
+
+PC Commander is a small [Model Context Protocol](https://modelcontextprotocol.io) server exposing one tool, `run_command`, over streamable HTTP. The server binds to `127.0.0.1` only; a Cloudflare named tunnel provides the public HTTPS hostname. Requests carry a token (`?key=` or Bearer); each command passes an approval gate (a topmost WinForms dialog) unless mode is `always`.
 
 ```
 src/
-  server.mjs      MCP streamable-HTTP server; the run_command tool; /health, settings + mode API
+  server.mjs      MCP server; run_command tool; /health, settings + mode API
   exec.mjs        runs a command in PowerShell, captures stdout/stderr/exit code
   approve.mjs     spawns the approval dialog; returns approved/denied/timeout
-  approve.ps1     the topmost WinForms Approve/Deny dialog with a countdown
+  approve.ps1     the topmost Approve/Deny dialog with a countdown
   config.mjs      defaults + generates data/token.txt
   log.mjs         JSONL logging
   run.mjs         quick-start launcher (server + temporary tunnel)
   settings.html   the Ask / Always-allow page
 scripts/
-  install.ps1       deps + key + auto-start the server
+  install.ps1       deps + key + auto-start the server at logon
   setup-domain.ps1  named Cloudflare tunnel + permanent URL + auto-start the tunnel
   autostart/*.vbs   windowless launchers used by the Startup shortcuts
 cloudflared/
   pc-commands.example.yml   template (your real one is generated & gitignored)
-assets/           icons + docs images
 ```
 
-Built on the [Model Context Protocol](https://modelcontextprotocol.io). PRs welcome.
+Run `npm start` to launch just the server, `npm run quick` for server + temporary tunnel. PRs welcome.
 
-## License
+</details>
 
-MIT © Lucifer-xD
+<div align="center">
+<br>
+<sub>MIT License · Made for anyone who'd rather just <i>ask</i> their computer.</sub>
+</div>
