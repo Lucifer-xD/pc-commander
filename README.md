@@ -199,6 +199,17 @@ Open `http://127.0.0.1:8787/?key=YOUR_KEY` on the PC (the installer also drops a
 
 The page also shows your recent commands and how each was decided (auto / approved / denied).
 
+### Two permission layers
+
+There are **two** places that can ask before a command runs — know the difference:
+
+1. **PC Commander's own gate** (this settings page, above) — the Approve dialog on your PC. This is the real security boundary and works no matter which ChatGPT surface you use.
+2. **ChatGPT's connector permission** — ChatGPT may also ask *"allow PC Commander to run this?"* before it even calls the tool:
+   - **Web:** it prompts the first time; choose **Always allow** for the connector to stop being asked.
+   - **Desktop app:** *Settings → Personalization → Permissions → **Custom rules*** lets you set the connector/command actions to run **without asking** (or to keep requiring approval). Set it to *without asking* if you want ChatGPT to stop prompting — PC Commander's own gate still protects you.
+
+> Want it fully hands‑off? Set **Always allow** on this page **and** the ChatGPT‑side permission to *without asking*. Want maximum safety? Leave both on **Ask**.
+
 ---
 
 ## Your key
