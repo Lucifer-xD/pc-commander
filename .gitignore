@@ -1,0 +1,14 @@
+# secrets & per-machine state (NEVER commit these)
+data/
+logs/
+*.log
+
+# your real Cloudflare tunnel config + credentials (keep private)
+cloudflared/*.yml
+cloudflared/*.json
+!cloudflared/pc-commands.example.yml
+
+# generated startup shortcuts
+scripts/autostart/*.lnk
+
+node_modules/

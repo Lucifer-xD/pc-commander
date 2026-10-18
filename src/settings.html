@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>PC Commands</title>
+<style>
+:root{--bg:#0b0b12;--card:#15151f;--ink:#eef0ff;--mut:#9aa0c3;--edge:#2a2a38;--g:linear-gradient(135deg,#8b5cf6,#6366f1,#22d3ee)}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 "Segoe UI",system-ui,sans-serif;display:flex;justify-content:center;padding:28px 16px}
+.wrap{width:100%;max-width:520px}
+h1{font-size:20px;margin:0 0 2px;display:flex;align-items:center;gap:10px}
+.logo{width:34px;height:34px;border-radius:10px;background:var(--g);display:grid;place-items:center}
+.sub{color:var(--mut);font-size:13px;margin:0 0 20px}
+.card{background:var(--card);border:1px solid var(--edge);border-radius:16px;padding:20px;margin-bottom:16px}
+.lab{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--mut);margin:0 0 14px}
+.opt{display:flex;gap:12px;align-items:flex-start;padding:14px;border:1px solid var(--edge);border-radius:12px;cursor:pointer;margin-bottom:10px;transition:.15s}
+.opt:hover{border-color:#44465a}
+.opt.on{border-color:transparent;background:linear-gradient(var(--card),var(--card)) padding-box,var(--g) border-box;border:1px solid transparent;box-shadow:0 0 0 1px rgba(139,92,246,.4)}
+.opt .dot{width:20px;height:20px;border-radius:50%;border:2px solid #55566e;flex:none;margin-top:1px}
+.opt.on .dot{border-color:#8b5cf6;background:radial-gradient(circle,#8b5cf6 45%,transparent 48%)}
+.opt b{display:block;font-size:15px}.opt span{color:var(--mut);font-size:13px}
+.state{font-size:13px;color:var(--mut);text-align:center}
+.state b{color:#34d399}
+.recent{max-height:220px;overflow:auto}
+.row{display:flex;gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid var(--edge);font-size:13px}
+.row:last-child{border:0}
+.pill{font-size:11px;padding:2px 8px;border-radius:99px;flex:none}
+.pill.auto{background:rgba(52,211,153,.15);color:#6ee7b7}.pill.approved{background:rgba(99,102,241,.18);color:#a5b4fc}
+.pill.denied,.pill.timeout{background:rgba(251,113,133,.15);color:#fda4af}.pill.pending{background:rgba(251,191,36,.15);color:#fcd34d}
+.mono{font-family:Consolas,monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
+.t{color:#5f6488;font-size:11px;flex:none}
+.empty{color:var(--mut);text-align:center;padding:16px}
+</style></head>
+<body><div class="wrap">
+<h1><span class="logo">⚡</span> PC Commands</h1>
+<p class="sub">How ChatGPT runs commands on this PC</p>
+<div class="card">
+  <p class="lab">Mode</p>
+  <div class="opt" id="ask" onclick="setMode('ask')"><span class="dot"></span><div><b>Ask each time</b><span>A dialog pops up on this PC for every command. You click Approve before it runs.</span></div></div>
+  <div class="opt" id="always" onclick="setMode('always')"><span class="dot"></span><div><b>Always allow</b><span>Commands run immediately with no prompt. Faster, but anything ChatGPT sends runs.</span></div></div>
+  <p class="state" id="state">…</p>
+</div>
+<div class="card">
+  <p class="lab">Recent commands</p>
+  <div class="recent" id="recent"><div class="empty">Nothing yet.</div></div>
+</div>
+</div>
+<script>
+const key = new URLSearchParams(location.search).get('key') || '';
+const esc = s => String(s??'').replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+const ago = t => { const s=Math.round((Date.now()-t)/1000); return s<60?s+'s':s<3600?Math.round(s/60)+'m':Math.round(s/3600)+'h'; };
+async function load(){
+  const r = await fetch('/api/state?key='+encodeURIComponent(key)); if(!r.ok) return;
+  const s = await r.json(); paint(s);
+}
+function paint(s){
+  document.getElementById('ask').classList.toggle('on', s.mode==='ask');
+  document.getElementById('always').classList.toggle('on', s.mode==='always');
+  document.getElementById('state').innerHTML = s.mode==='always' ? 'Commands run <b>without asking</b>.' : 'Every command <b>waits for your Approve</b>.';
+  const el = document.getElementById('recent');
+  el.innerHTML = (s.recent&&s.recent.length) ? s.recent.map(c=>`<div class="row"><span class="pill ${c.decision}">${c.decision}</span><span class="mono">${esc(c.command)}</span><span class="t">${ago(c.t)}</span></div>`).join('') : '<div class="empty">Nothing yet.</div>';
+}
+async function setMode(m){
+  const r = await fetch('/api/mode?key='+encodeURIComponent(key),{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({mode:m})});
+  if(r.ok) load();
+}
+load(); setInterval(load, 2000);
+</script>
+</body></html>

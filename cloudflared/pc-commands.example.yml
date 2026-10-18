@@ -1,0 +1,18 @@
+# Cloudflare NAMED tunnel config (Option B: permanent URL on your own domain).
+#
+# DO NOT put your real UUIDs/hostname in this example file — scripts\setup-domain.ps1
+# generates the real pc-commands.yml for you (it is gitignored). This file just
+# shows the shape, in case you want to write it by hand.
+#
+# tunnel:            the tunnel UUID from `cloudflared tunnel create pc-commands`
+# credentials-file:  the JSON that same command wrote (keep it private)
+# protocol: http2    use this if your network blocks QUIC (common on mobile/office Wi-Fi)
+
+tunnel: 00000000-0000-0000-0000-000000000000
+credentials-file: C:\Users\YOU\.cloudflared\00000000-0000-0000-0000-000000000000.json
+protocol: http2
+loglevel: info
+ingress:
+  - hostname: pc.YOURDOMAIN.com
+    service: http://127.0.0.1:8787
+  - service: http_status:404

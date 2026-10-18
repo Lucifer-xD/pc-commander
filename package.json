@@ -1,0 +1,19 @@
+{
+  "name": "pc-commander",
+  "version": "1.0.0",
+  "description": "Run commands on your own PC from ChatGPT, over a private self-hosted MCP connector, gated by a local Approve dialog.",
+  "type": "module",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node src/server.mjs",
+    "quick": "node src/run.mjs",
+    "tunnel": "cloudflared tunnel --url http://127.0.0.1:8787"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.1",
+    "zod": "^3.25.76"
+  }
+}

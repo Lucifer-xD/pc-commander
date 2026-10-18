@@ -1,0 +1,25 @@
+<svg width="256" height="256" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <!-- solid background: compresses tiny, reads clean at small sizes -->
+  <rect x="0" y="0" width="512" height="512" rx="112" fill="#6a3df0"/>
+
+  <!-- chat bubble housing the terminal (flat dark fill) -->
+  <path d="M136 132
+           h240 a44 44 0 0 1 44 44
+           v150 a44 44 0 0 1 -44 44
+           h-150 l-70 60 v-60 h-20
+           a44 44 0 0 1 -44 -44
+           v-150 a44 44 0 0 1 44 -44 z"
+        fill="#17103c"/>
+
+  <!-- terminal title dots -->
+  <circle cx="176" cy="178" r="11" fill="#ff6b6b"/>
+  <circle cx="214" cy="178" r="11" fill="#ffd166"/>
+  <circle cx="252" cy="178" r="11" fill="#4cd964"/>
+
+  <!-- prompt chevron -->
+  <path d="M168 232 l44 36 -44 36"
+        fill="none" stroke="#9affc8" stroke-width="20"
+        stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- command line -->
+  <rect x="228" y="288" width="128" height="20" rx="10" fill="#ffffff"/>
+</svg>
