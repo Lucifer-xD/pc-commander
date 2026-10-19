@@ -11,6 +11,8 @@ import {fileURLToPath} from 'node:url';
 import {z} from 'zod';
 import {runCommand} from './exec.mjs';
 import {isWin, isMac} from './shell.mjs';
+import {snapshot, recycle} from './undo.mjs';
+import {resolveSecrets} from './secrets.mjs';
 
 const SHOT = fileURLToPath(new URL('./screenshot.ps1', import.meta.url));
 const text = t => ({content: [{type: 'text', text: String(t)}]});
@@ -63,6 +65,7 @@ export function makeTools(config) {
       },
       summarize: a => ({title: `Run a ${isWin ? 'PowerShell' : 'shell'} command`, detail: a.command}),
       run: async ({command, cwd}) => {
+        command = resolveSecrets(config.dataDir, command);
         const r = await runCommand({command, cwd: cwd || config.defaultCwd, timeoutMs: cmdTimeout, maxOutputChars: config.maxOutputChars || CAP});
         const parts = [`exit code: ${r.timedOut ? 'timed out' : r.exitCode}`, `cwd: ${r.cwd}`];
         if (r.stdout.trim()) parts.push('--- stdout ---\n' + r.stdout.trimEnd());
@@ -189,6 +192,7 @@ Get-CimInstance Win32_LogicalDisk -Filter "DriveType=3" | ForEach-Object { "Disk
       summarize: a => ({title: a.append ? 'Append to a file' : 'Write a file', detail: `${abs(a.path)}\n\n${a.content.slice(0, 1500)}${a.content.length > 1500 ? '\n…' : ''}`}),
       run: async ({path, content, append}) => {
         const p = abs(path); mkdirSync(dirname(p), {recursive: true});
+        if (!append) snapshot(p, 'write');
         if (append) appendFileSync(p, content, 'utf8'); else writeFileSync(p, content, 'utf8');
         return text(`${append ? 'Appended to' : 'Wrote'} ${p} (${human(Buffer.byteLength(content))}).`);
       },
@@ -204,19 +208,25 @@ Get-CimInstance Win32_LogicalDisk -Filter "DriveType=3" | ForEach-Object { "Disk
         const before = readFileSync(p, 'utf8');
         if (!before.includes(find)) return fail(`Text not found in ${p}; nothing changed.`);
         const after = all ? before.split(find).join(replace) : before.replace(find, replace);
+        snapshot(p, 'edit');
         writeFileSync(p, after, 'utf8');
         return text(`Replaced ${all ? before.split(find).length - 1 : 1} occurrence(s) in ${p}.`);
       },
     },
     {
       name: 'manage_path', risk: 'write',
-      description: 'File/folder housekeeping: create a folder, move/rename, copy, or delete a file or folder.',
-      shape: {action: z.enum(['mkdir', 'move', 'copy', 'delete']), path: z.string(), to: z.string().optional()},
-      summarize: a => ({title: `File action: ${a.action}`, detail: a.to ? `${abs(a.path)}  ->  ${abs(a.to)}` : abs(a.path)}),
-      run: async ({action, path, to}) => {
+      description: 'File/folder housekeeping: create a folder, move/rename, copy, or delete a file or folder. Deletes go to the Recycle Bin (recoverable) unless permanent=true.',
+      shape: {action: z.enum(['mkdir', 'move', 'copy', 'delete']), path: z.string(), to: z.string().optional(), permanent: z.boolean().optional().describe('For delete: skip the Recycle Bin and remove permanently.')},
+      summarize: a => ({title: `File action: ${a.action}${a.action === 'delete' && !a.permanent ? ' (to Recycle Bin)' : ''}`, detail: a.to ? `${abs(a.path)}  ->  ${abs(a.to)}` : abs(a.path)}),
+      run: async ({action, path, to, permanent}) => {
         const p = abs(path);
         if (action === 'mkdir') { mkdirSync(p, {recursive: true}); return text(`Created folder ${p}.`); }
-        if (action === 'delete') { if (!existsSync(p)) return fail(`No such path: ${p}`); rmSync(p, {recursive: true, force: true}); return text(`Deleted ${p}.`); }
+        if (action === 'delete') {
+          if (!existsSync(p)) return fail(`No such path: ${p}`);
+          if (permanent) { rmSync(p, {recursive: true, force: true}); return text(`Permanently deleted ${p}.`); }
+          const r = await recycle(p);
+          return r.ok ? text(`Sent ${p} to the Recycle Bin (recoverable).`) : fail(`Could not recycle ${p}: ${r.err}`);
+        }
         if (!to) return fail(`"to" is required for ${action}.`);
         const d = abs(to);
         if (!existsSync(p)) return fail(`No such source: ${p}`);

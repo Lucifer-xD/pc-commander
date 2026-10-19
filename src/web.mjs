@@ -4,13 +4,15 @@ import {writeFileSync, mkdirSync} from 'node:fs';
 import {dirname, resolve} from 'node:path';
 import {homedir} from 'node:os';
 import {z} from 'zod';
+import {resolveSecrets} from './secrets.mjs';
 
 const text = t => ({content: [{type: 'text', text: String(t)}]});
 const fail = t => ({isError: true, content: [{type: 'text', text: String(t)}]});
 const abs = p => resolve(String(p).replace(/^~(?=[\\/]|$)/, process.env.USERPROFILE || homedir()));
 const CAP = 100000;
 
-export function makeWebTools() {
+export function makeWebTools(config) {
+  const sec = s => resolveSecrets(config.dataDir, s);
   return [
     {
       name: 'http_request', risk: 'exec',
@@ -24,9 +26,11 @@ export function makeWebTools() {
       summarize: a => ({title: `HTTP ${a.method || 'GET'}`, detail: a.url}),
       run: async ({url, method, headers, body}) => {
         try {
+          url = sec(url); body = body != null ? sec(body) : body;
+          const h = {}; for (const [k, v] of Object.entries(headers || {})) h[k] = sec(v);
           const ctrl = new AbortController();
           const t = setTimeout(() => ctrl.abort(), 60000);
-          const res = await fetch(url, {method: method || 'GET', headers: headers || {}, body: body ?? undefined, signal: ctrl.signal, redirect: 'follow'});
+          const res = await fetch(url, {method: method || 'GET', headers: h, body: body ?? undefined, signal: ctrl.signal, redirect: 'follow'});
           clearTimeout(t);
           let txt = await res.text();
           const truncated = txt.length > CAP;

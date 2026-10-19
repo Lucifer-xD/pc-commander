@@ -21,9 +21,12 @@ import {makeWebTools} from './web.mjs';
 import {makeNotifyTools} from './notify.mjs';
 import {makeExtraTools} from './extra.mjs';
 import {makeSchedulerTools, initScheduler} from './scheduler.mjs';
+import {makeUndoTools, initUndo} from './undo.mjs';
+import {makeSecretTools} from './secrets.mjs';
 import {loadGuard, assess} from './guard.mjs';
+import {z} from 'zod';
 
-const VERSION = '0.6.0';
+const VERSION = '0.7.0';
 const config = loadConfig();
 const log = createLog(join(ROOT, 'logs', 'connector.log'));
 const SETTINGS = readFileSync(new URL('./settings.html', import.meta.url), 'utf8');
@@ -31,9 +34,21 @@ const modeFile = join(config.dataDir, 'mode.json');
 const guard = loadGuard(config.dataDir);
 initJobs(config);
 initScheduler(config);
+initUndo(config);
+
+// A small built-in control tool: toggle dry-run (preview) mode.
+const controlTools = [{
+  name: 'set_dry_run', risk: 'read',
+  description: 'Turn DRY-RUN (preview) mode on or off. When ON, the agent reports what each change/command WOULD do without actually doing it. Reads still work normally.',
+  shape: {enabled: z.boolean()},
+  summarize: a => ({title: a.enabled ? 'Enable dry-run (preview)' : 'Disable dry-run', detail: ''}),
+  run: async ({enabled}) => { setDryRun(enabled); return {content: [{type: 'text', text: `Dry-run is now ${enabled ? 'ON — changes are previewed, not performed' : 'OFF — changes happen for real'}.`}]}; },
+}];
+
 const tools = [
   ...makeTools(config), ...makeRemoteTools(config), ...makeJobTools(config), ...makeGuiTools(),
-  ...makeMemoryTools(config), ...makeWebTools(), ...makeNotifyTools(config), ...makeExtraTools(), ...makeSchedulerTools(),
+  ...makeMemoryTools(config), ...makeWebTools(config), ...makeNotifyTools(config), ...makeExtraTools(), ...makeSchedulerTools(),
+  ...makeUndoTools(), ...makeSecretTools(config), ...controlTools,
 ];
 
 // Simple rate limiter: cap tool invocations per rolling minute (runaway-loop guard).
@@ -42,11 +57,11 @@ const hits = [];
 function rateOk() { const now = Date.now(); while (hits.length && now - hits[0] > 60000) hits.shift(); if (hits.length >= MAX_PER_MIN) return false; hits.push(now); return true; }
 const recent = [];
 
-function currentMode() {
-  try { return JSON.parse(readFileSync(modeFile, 'utf8')).mode === 'always' ? 'always' : 'ask'; }
-  catch { return 'ask'; }
-}
-function setMode(m) { writeFileSync(modeFile, JSON.stringify({mode: m === 'always' ? 'always' : 'ask'}) + '\n'); }
+function readState() { try { return JSON.parse(readFileSync(modeFile, 'utf8')); } catch { return {}; } }
+function currentMode() { return readState().mode === 'always' ? 'always' : 'ask'; }
+function currentDryRun() { return !!readState().dryRun; }
+function setMode(m) { const s = readState(); writeFileSync(modeFile, JSON.stringify({...s, mode: m === 'always' ? 'always' : 'ask'}) + '\n'); }
+function setDryRun(v) { const s = readState(); writeFileSync(modeFile, JSON.stringify({...s, dryRun: !!v}) + '\n'); }
 
 function authorized(req, url) {
   const bearer = (req.headers.authorization || '').replace(/^Bearer\s+/i, '');
@@ -71,6 +86,13 @@ function buildServer() {
         return {isError: true, content: [{type: 'text', text: 'BLOCKED by safety guard. ' + g.reason}]};
       }
       if (g.level === 'confirm') detail = '⚠ ' + g.reason + '\n\n' + (detail || '');
+
+      // Dry-run: preview what a change/exec WOULD do, without doing it. Reads still run.
+      if (currentDryRun() && tool.risk !== 'read') {
+        recent.unshift({t: Date.now(), tool: tool.name, command: '👁 ' + title, mode, decision: 'auto'}); recent.length = Math.min(recent.length, 50);
+        log('dry_run', {tool: tool.name, title});
+        return {content: [{type: 'text', text: `DRY RUN (preview — nothing was changed).\nWould: ${title}${detail ? '\n' + detail : ''}\n\nTurn off dry-run to perform it for real.`}]};
+      }
 
       // read-only tools never change the machine -> run straight away.
       // write/exec wait for a click unless Always-allow. A guard "confirm" always prompts.
@@ -113,14 +135,14 @@ const sendJson = (res, status, data) => { res.writeHead(status, {'content-type':
 
 const httpServer = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://127.0.0.1');
-  if (req.method === 'GET' && url.pathname === '/health') return sendJson(res, 200, {ok: true, name: 'pc-connector', version: VERSION, mode: currentMode(), tools: tools.length});
+  if (req.method === 'GET' && url.pathname === '/health') return sendJson(res, 200, {ok: true, name: 'pc-connector', version: VERSION, mode: currentMode(), dryRun: currentDryRun(), tools: tools.length});
 
   if (url.pathname === '/' || url.pathname === '/settings' || url.pathname.startsWith('/api/')) {
     if (!authorized(req, url)) { res.writeHead(401, {'content-type': 'text/plain'}); return res.end('Add ?key=YOUR_TOKEN to the URL.'); }
     if (req.method === 'GET' && (url.pathname === '/' || url.pathname === '/settings')) {
       res.writeHead(200, {'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store'}); return res.end(SETTINGS);
     }
-    if (req.method === 'GET' && url.pathname === '/api/state') return sendJson(res, 200, {mode: currentMode(), recent, tools: tools.map(t => ({name: t.name, risk: t.risk}))});
+    if (req.method === 'GET' && url.pathname === '/api/state') return sendJson(res, 200, {mode: currentMode(), dryRun: currentDryRun(), recent, tools: tools.map(t => ({name: t.name, risk: t.risk}))});
     if (req.method === 'POST' && url.pathname === '/api/mode') {
       const body = await readBody(req).catch(() => ({}));
       setMode(body?.mode); log('mode_changed', {mode: currentMode()});

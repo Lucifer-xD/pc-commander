@@ -6,6 +6,7 @@ import {spawn} from 'node:child_process';
 import {readFileSync, writeFileSync, existsSync} from 'node:fs';
 import {join} from 'node:path';
 import {z} from 'zod';
+import {resolveSecrets} from './secrets.mjs';
 
 const text = t => ({content: [{type: 'text', text: String(t)}]});
 const fail = t => ({isError: true, content: [{type: 'text', text: String(t)}]});
@@ -110,7 +111,7 @@ export function makeRemoteTools(config) {
       summarize: a => ({title: `Run on ${a.server || a.host} (SSH)`, detail: a.command}),
       run: async (a) => {
         const s = resolve(a);
-        const r = await run('ssh', [...sshArgs(s), a.command], {timeoutMs: config.commandTimeoutMs || 110000});
+        const r = await run('ssh', [...sshArgs(s), resolveSecrets(config.dataDir, a.command)], {timeoutMs: config.commandTimeoutMs || 110000});
         if (r.timedOut) return fail(`SSH to ${s.host} timed out.`);
         const parts = [`[${s.user ? s.user + '@' : ''}${s.host}] exit ${r.code}`];
         if (r.out) parts.push(r.out);
