@@ -99,6 +99,29 @@ PC Commander isn't limited to the PC it runs on. Tell it about your servers once
 
 ---
 
+## 🤖 Agent superpowers (memory, automation, reach)
+
+Beyond doing things *right now*, PC Commander can remember, run on a schedule, reach the internet, and tell you when it's done.
+
+| Area | Tools | What it unlocks |
+|---|---|---|
+| **🧠 Memory** | `remember` · `recall` · `forget` | Remembers your setup, preferences, and projects **across chats** — it gets to know your world. |
+| **⏰ Scheduler** | `schedule_task` · `list_scheduled` · `cancel_scheduled` · `run_scheduled_now` | Runs things on a repeat (*"every morning, back up Documents and ping me"*) — even when you're not chatting. |
+| **🔔 Notifications** | `configure_notify` · `notify` | Pings **you** on Telegram / Discord / any webhook — e.g. when a long job finishes. |
+| **🌐 Internet** | `http_request` · `download_file` | Call any web API, hit webhooks, download files. |
+| **⏳ Long-running jobs** | `start_job` · `job_status` · `list_jobs` · `stop_job` | Background tasks (builds, downloads) that keep running, **keep the PC awake**, and **notify you when done**. |
+| **🗄️ Survive-anything jobs** | `start_remote_job` · `remote_job_log` | Run hours-long tasks on a **server** (via `nohup`) so they survive disconnects *and your laptop shutting down*. |
+| **🚀 Fleet** | `ssh_run_all` | Run one command across **all** your servers at once. |
+| **📋 Extras** | `read_clipboard` · `set_clipboard` · `keep_awake` · `screen_size` | Clipboard access, pin the PC awake, check screen resolution. |
+
+**Examples:**
+
+> *"Remember that my main project is at C:\\dev\\app and I deploy to the **london** server."*
+> *"Every day at startup, check for Windows updates and Telegram me the result."*
+> *"Download the latest release from this URL, then on **london** run the migration as a remote job and tell me when it finishes."*
+
+---
+
 ## ✅ What you'll need
 
 | | |
@@ -281,8 +304,14 @@ PC Commander is a small [Model Context Protocol](https://modelcontextprotocol.io
 src/
   server.mjs      MCP server; registers all tools; risk+guard+rate-limit; /health, settings API
   tools.mjs       core tools (files, search, system, screenshot) — cross-platform
-  remote.mjs      SSH / SCP / WinRM / RDP + saved-server registry
-  jobs.mjs        background jobs (start/status/list/stop)
+  remote.mjs      SSH / SCP / WinRM / RDP, fan-out, persistent remote jobs, registry
+  jobs.mjs        durable background jobs (keep-awake, notify-on-done)
+  scheduler.mjs   recurring/one-shot scheduled tasks (persisted, re-armed on start)
+  memory.mjs      long-term memory (remember/recall/forget)
+  web.mjs         http_request / download_file
+  notify.mjs      Telegram / Discord / webhook notifications
+  extra.mjs       clipboard, keep_awake, screen_size
+  keepawake.mjs   stops the PC sleeping while jobs run
   gui.mjs/.ps1    mouse & keyboard control (Windows)
   guard.mjs       safety guard: block catastrophic, confirm sensitive, protect system dirs
   shell.mjs       per-OS shell selection (PowerShell / sh)

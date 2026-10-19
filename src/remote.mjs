@@ -43,6 +43,10 @@ export function makeRemoteTools(config) {
     args.push(s.user ? `${s.user}@${s.host}` : s.host);
     return args;
   };
+  const shq = c => "'" + String(c).replace(/'/g, "'\\''") + "'";
+  const rjFile = join(config.dataDir, 'remote-jobs.json');
+  const rjLoad = () => { try { return JSON.parse(readFileSync(rjFile, 'utf8')); } catch { return []; } };
+  const rjSave = l => writeFileSync(rjFile, JSON.stringify(l, null, 2) + '\n');
 
   return [
     {
@@ -170,6 +174,57 @@ export function makeRemoteTools(config) {
         // stash the username hint so mstsc pre-fills it
         const r = await run('cmd.exe', ['/c', 'start', '', 'mstsc', ...args], {timeoutMs: 15000});
         return r.code === 0 || r.code === null ? text(`Opened a Remote Desktop window to ${addr}${s.user ? ' (log in as ' + s.user + ')' : ''}. Finish signing in on screen.`) : fail(r.err || 'Could not launch mstsc.');
+      },
+    },
+    {
+      name: 'ssh_run_all', risk: 'exec',
+      description: 'Run the SAME command on EVERY saved SSH server at once (fan-out) and return each result. Great for fleet-wide checks or updates.',
+      shape: {command: z.string().describe('The command to run on all saved Linux servers.')},
+      summarize: a => ({title: 'Run on ALL servers', detail: a.command}),
+      run: async ({command}) => {
+        const list = load().filter(s => (s.type || 'ssh') === 'ssh');
+        if (!list.length) return fail('No saved SSH servers. Add some with add_server.');
+        const results = await Promise.all(list.map(async s => {
+          const r = await run('ssh', [...sshArgs(s), command], {timeoutMs: config.commandTimeoutMs || 110000});
+          return `=== ${s.name} (${s.host}) · exit ${r.code} ===\n${(r.out || r.err || '(no output)').slice(0, 4000)}`;
+        }));
+        return text(results.join('\n\n'));
+      },
+    },
+    {
+      name: 'start_remote_job', risk: 'exec',
+      description: 'Start a long-running job on a remote server that KEEPS RUNNING after you disconnect and even after your own PC shuts down (via nohup). Returns a job id; read its output with remote_job_log. This is the right place for hours-long tasks.',
+      shape: {
+        server: z.string().optional(), host: z.string().optional(), user: z.string().optional(), port: z.number().optional(), keyfile: z.string().optional(),
+        command: z.string().describe('The command to run on the server.'),
+        label: z.string().optional(),
+      },
+      summarize: a => ({title: `Start remote job on ${a.server || a.host}`, detail: a.command}),
+      run: async (a) => {
+        const s = resolve(a);
+        const id = 'rjob' + Date.now().toString(36);
+        const log = `$HOME/.pc-jobs/${id}.log`;
+        const remote = `mkdir -p ~/.pc-jobs; nohup sh -c ${shq(a.command)} > ${log} 2>&1 & echo "PID:$!"; echo "LOG:${log}"`;
+        const r = await run('ssh', [...sshArgs(s), remote], {timeoutMs: 30000});
+        const pid = (r.out.match(/PID:(\d+)/) || [])[1];
+        if (!pid) return fail(`Could not start remote job.\n${r.err || r.out}`);
+        const rec = {id, server: s.name || s.host, host: s.host, user: s.user, port: s.port, keyfile: s.keyfile, pid, log: `~/.pc-jobs/${id}.log`, command: a.command, label: a.label || '', started: Date.now()};
+        rjSave([rec, ...rjLoad()].slice(0, 100));
+        return text(`Started remote job ${id} (pid ${pid}) on ${s.host}. It survives disconnect and your PC shutting down. Read it with remote_job_log id "${id}".`);
+      },
+    },
+    {
+      name: 'remote_job_log', risk: 'read',
+      description: 'Check a remote job started with start_remote_job: whether it is still running, and its latest output.',
+      shape: {id: z.string()},
+      summarize: a => ({title: 'Check remote job', detail: a.id}),
+      run: async ({id}) => {
+        const rec = rjLoad().find(j => j.id === id);
+        if (!rec) return fail(`No remote job "${id}".`);
+        const s = {host: rec.host, user: rec.user, port: rec.port, keyfile: rec.keyfile};
+        const remote = `(kill -0 ${rec.pid} 2>/dev/null && echo "STATUS:running" || echo "STATUS:finished"); echo "--- output ---"; tail -c 8000 ${rec.log} 2>/dev/null`;
+        const r = await run('ssh', [...sshArgs(s), remote], {timeoutMs: 30000});
+        return text(`${rec.id}${rec.label ? ' (' + rec.label + ')' : ''} on ${rec.host}\n$ ${rec.command}\n${r.out || r.err}`);
       },
     },
   ];

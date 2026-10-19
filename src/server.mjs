@@ -14,17 +14,27 @@ import {requestApproval, autoApproved} from './approve.mjs';
 import {createLog} from './log.mjs';
 import {makeTools} from './tools.mjs';
 import {makeRemoteTools} from './remote.mjs';
-import {makeJobTools} from './jobs.mjs';
+import {makeJobTools, initJobs} from './jobs.mjs';
 import {makeGuiTools} from './gui.mjs';
+import {makeMemoryTools} from './memory.mjs';
+import {makeWebTools} from './web.mjs';
+import {makeNotifyTools} from './notify.mjs';
+import {makeExtraTools} from './extra.mjs';
+import {makeSchedulerTools, initScheduler} from './scheduler.mjs';
 import {loadGuard, assess} from './guard.mjs';
 
-const VERSION = '0.5.0';
+const VERSION = '0.6.0';
 const config = loadConfig();
 const log = createLog(join(ROOT, 'logs', 'connector.log'));
 const SETTINGS = readFileSync(new URL('./settings.html', import.meta.url), 'utf8');
 const modeFile = join(config.dataDir, 'mode.json');
 const guard = loadGuard(config.dataDir);
-const tools = [...makeTools(config), ...makeRemoteTools(config), ...makeJobTools(config), ...makeGuiTools()];
+initJobs(config);
+initScheduler(config);
+const tools = [
+  ...makeTools(config), ...makeRemoteTools(config), ...makeJobTools(config), ...makeGuiTools(),
+  ...makeMemoryTools(config), ...makeWebTools(), ...makeNotifyTools(config), ...makeExtraTools(), ...makeSchedulerTools(),
+];
 
 // Simple rate limiter: cap tool invocations per rolling minute (runaway-loop guard).
 const MAX_PER_MIN = config.maxPerMinute || 120;
