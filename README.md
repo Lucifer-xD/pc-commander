@@ -41,8 +41,35 @@ Once it's set up, just chat normally. For example:
 - *"What's my computer's IP address and Windows version?"*
 - *"Make a folder on my Desktop called Taxes and move all my PDFs into it."*
 - *"Is my laptop running hot? What's using the most memory right now?"*
+- *"What's on my screen right now?"* — it can actually **take a screenshot and look**.
 
 It can do basically anything you could type into your PC yourself — you just approve it first.
+
+---
+
+## 🧰 What it can do
+
+PC Commander gives ChatGPT a real toolbox, not just a command line. Each tool is colour‑coded by how careful it is:
+
+🟢 **reads** (runs instantly, never changes anything) · 🟡 **changes files** (asks first) · 🔵 **runs / launches** (asks first)
+
+| Tool | What it does | |
+|---|---|---|
+| `read_file` | Read any text file | 🟢 |
+| `list_dir` | List what's in a folder | 🟢 |
+| `find_files` | Find files by name (e.g. all your PDFs) | 🟢 |
+| `search_in_files` | Search *inside* files for text | 🟢 |
+| `system_info` | OS, CPU, RAM, disk space, uptime | 🟢 |
+| `list_processes` | What's running / using memory | 🟢 |
+| `write_file` | Create or overwrite a file | 🟡 |
+| `edit_file` | Find‑and‑replace inside a file | 🟡 |
+| `manage_path` | Make / move / copy / delete files & folders | 🟡 |
+| `run_command` | Run any PowerShell command (anything above + more) | 🔵 |
+| `open_path` | Open a file, folder, app, or website | 🔵 |
+| `kill_process` | Stop a frozen or unwanted program | 🔵 |
+| `screenshot` | Capture the screen so ChatGPT can **see** it | 🔵 |
+
+> By default, 🟢 reads happen instantly (they're harmless) while 🟡/🔵 actions wait for your **Approve** — so ChatGPT can freely *look around*, but never *change* anything without your okay. Switch to **Always allow** on the settings page for fully hands‑off.
 
 ---
 

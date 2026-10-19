@@ -27,6 +27,12 @@ h1{font-size:20px;margin:0 0 2px;display:flex;align-items:center;gap:10px}
 .mono{font-family:Consolas,monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
 .t{color:#5f6488;font-size:11px;flex:none}
 .empty{color:var(--mut);text-align:center;padding:16px}
+.tools{display:flex;flex-wrap:wrap;gap:8px}
+.tool{font-size:12px;padding:4px 10px;border-radius:99px;border:1px solid var(--edge);display:flex;align-items:center;gap:6px}
+.tool i{width:7px;height:7px;border-radius:50%;display:inline-block}
+.tool .read{background:#34d399}.tool .write{background:#fcd34d}.tool .exec{background:#a5b4fc}
+.legend{font-size:11px;color:var(--mut);margin-top:10px;display:flex;gap:14px}
+.legend span{display:flex;align-items:center;gap:5px}
 </style></head>
 <body><div class="wrap">
 <h1><span class="logo">⚡</span> PC Commands</h1>
@@ -38,7 +44,16 @@ h1{font-size:20px;margin:0 0 2px;display:flex;align-items:center;gap:10px}
   <p class="state" id="state">…</p>
 </div>
 <div class="card">
-  <p class="lab">Recent commands</p>
+  <p class="lab">What it can do · <span id="toolcount">0</span> tools</p>
+  <div class="tools" id="tools"></div>
+  <div class="legend">
+    <span><i class="read"></i>reads (runs instantly)</span>
+    <span><i class="write"></i>changes files</span>
+    <span><i class="exec"></i>runs / launches</span>
+  </div>
+</div>
+<div class="card">
+  <p class="lab">Recent activity</p>
   <div class="recent" id="recent"><div class="empty">Nothing yet.</div></div>
 </div>
 </div>
@@ -56,6 +71,10 @@ function paint(s){
   document.getElementById('state').innerHTML = s.mode==='always' ? 'Commands run <b>without asking</b>.' : 'Every command <b>waits for your Approve</b>.';
   const el = document.getElementById('recent');
   el.innerHTML = (s.recent&&s.recent.length) ? s.recent.map(c=>`<div class="row"><span class="pill ${c.decision}">${c.decision}</span><span class="mono">${esc(c.command)}</span><span class="t">${ago(c.t)}</span></div>`).join('') : '<div class="empty">Nothing yet.</div>';
+  if (s.tools) {
+    document.getElementById('toolcount').textContent = s.tools.length;
+    document.getElementById('tools').innerHTML = s.tools.map(t=>`<span class="tool"><i class="${t.risk}"></i>${esc(t.name)}</span>`).join('');
+  }
 }
 async function setMode(m){
   const r = await fetch('/api/mode?key='+encodeURIComponent(key),{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({mode:m})});
