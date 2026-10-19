@@ -24,6 +24,7 @@ import {makeSchedulerTools, initScheduler} from './scheduler.mjs';
 import {makeUndoTools, initUndo} from './undo.mjs';
 import {makeSecretTools} from './secrets.mjs';
 import {makeDevTools} from './dev.mjs';
+import {makeBrowserTools} from './browser.mjs';
 import {makeAgentTools} from './agent.mjs';
 import {loadGuard, assess} from './guard.mjs';
 import {z} from 'zod';
@@ -50,7 +51,7 @@ const controlTools = [{
 const baseTools = [
   ...makeTools(config), ...makeRemoteTools(config), ...makeJobTools(config), ...makeGuiTools(),
   ...makeMemoryTools(config), ...makeWebTools(config), ...makeNotifyTools(config), ...makeExtraTools(), ...makeSchedulerTools(),
-  ...makeUndoTools(), ...makeSecretTools(config), ...makeDevTools(config), ...controlTools,
+  ...makeUndoTools(), ...makeSecretTools(config), ...makeDevTools(config), ...makeBrowserTools(config), ...controlTools,
 ];
 
 // How the autonomous engine runs a tool: guard-checked, no per-step dialog
