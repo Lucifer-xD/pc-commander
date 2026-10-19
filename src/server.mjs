@@ -24,6 +24,7 @@ import {makeSchedulerTools, initScheduler} from './scheduler.mjs';
 import {makeUndoTools, initUndo} from './undo.mjs';
 import {makeSecretTools} from './secrets.mjs';
 import {makeDevTools} from './dev.mjs';
+import {makeAgentTools} from './agent.mjs';
 import {loadGuard, assess} from './guard.mjs';
 import {z} from 'zod';
 
@@ -46,11 +47,25 @@ const controlTools = [{
   run: async ({enabled}) => { setDryRun(enabled); return {content: [{type: 'text', text: `Dry-run is now ${enabled ? 'ON — changes are previewed, not performed' : 'OFF — changes happen for real'}.`}]}; },
 }];
 
-const tools = [
+const baseTools = [
   ...makeTools(config), ...makeRemoteTools(config), ...makeJobTools(config), ...makeGuiTools(),
   ...makeMemoryTools(config), ...makeWebTools(config), ...makeNotifyTools(config), ...makeExtraTools(), ...makeSchedulerTools(),
   ...makeUndoTools(), ...makeSecretTools(config), ...makeDevTools(config), ...controlTools,
 ];
+
+// How the autonomous engine runs a tool: guard-checked, no per-step dialog
+// (you approve launching agent_task itself), catastrophic actions still blocked.
+async function runToolAutonomous(name, args) {
+  const tool = baseTools.find(t => t.name === name);
+  if (!tool) return 'No such tool: ' + name;
+  const g = assess(tool, args, guard);
+  if (g.level === 'block') return 'BLOCKED by safety guard: ' + g.reason;
+  if (g.level === 'confirm') return 'SKIPPED (this sensitive action needs a human to confirm it): ' + g.reason;
+  try { const out = await tool.run(args); return (out.content || []).map(c => c.type === 'text' ? c.text : '[image]').join('\n') || '(done)'; }
+  catch (e) { return 'ERROR: ' + e.message; }
+}
+
+const tools = [...baseTools, ...makeAgentTools(config, {tools: baseTools, runTool: runToolAutonomous})];
 
 // Simple rate limiter: cap tool invocations per rolling minute (runaway-loop guard).
 const MAX_PER_MIN = config.maxPerMinute || 120;

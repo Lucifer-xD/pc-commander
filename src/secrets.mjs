@@ -39,6 +39,9 @@ function saveVault(dataDir, plain) {
   writeFileSync(vaultFile(dataDir), JSON.stringify(raw, null, 2) + '\n', {mode: 0o600});
 }
 
+export function setSecret(dataDir, name, value) { const v = loadVault(dataDir); v[name] = value; saveVault(dataDir, v); }
+export function getSecret(dataDir, name) { return loadVault(dataDir)[name]; }
+
 // Replace ${secret:NAME} in a string with the decrypted value (used by other tools).
 export function resolveSecrets(dataDir, str) {
   if (typeof str !== 'string' || !str.includes('${secret:')) return str;
