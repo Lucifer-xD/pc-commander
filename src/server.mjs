@@ -23,6 +23,7 @@ import {makeExtraTools} from './extra.mjs';
 import {makeSchedulerTools, initScheduler} from './scheduler.mjs';
 import {makeUndoTools, initUndo} from './undo.mjs';
 import {makeSecretTools} from './secrets.mjs';
+import {makeDevTools} from './dev.mjs';
 import {loadGuard, assess} from './guard.mjs';
 import {z} from 'zod';
 
@@ -48,7 +49,7 @@ const controlTools = [{
 const tools = [
   ...makeTools(config), ...makeRemoteTools(config), ...makeJobTools(config), ...makeGuiTools(),
   ...makeMemoryTools(config), ...makeWebTools(config), ...makeNotifyTools(config), ...makeExtraTools(), ...makeSchedulerTools(),
-  ...makeUndoTools(), ...makeSecretTools(config), ...controlTools,
+  ...makeUndoTools(), ...makeSecretTools(config), ...makeDevTools(config), ...controlTools,
 ];
 
 // Simple rate limiter: cap tool invocations per rolling minute (runaway-loop guard).
