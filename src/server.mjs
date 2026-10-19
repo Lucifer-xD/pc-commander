@@ -29,7 +29,7 @@ import {makeAgentTools} from './agent.mjs';
 import {loadGuard, assess} from './guard.mjs';
 import {z} from 'zod';
 
-const VERSION = '0.7.0';
+const VERSION = '0.8.0';
 const config = loadConfig();
 const log = createLog(join(ROOT, 'logs', 'connector.log'));
 const SETTINGS = readFileSync(new URL('./settings.html', import.meta.url), 'utf8');
@@ -159,11 +159,24 @@ const httpServer = http.createServer(async (req, res) => {
     if (req.method === 'GET' && (url.pathname === '/' || url.pathname === '/settings')) {
       res.writeHead(200, {'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store'}); return res.end(SETTINGS);
     }
-    if (req.method === 'GET' && url.pathname === '/api/state') return sendJson(res, 200, {mode: currentMode(), dryRun: currentDryRun(), recent, tools: tools.map(t => ({name: t.name, risk: t.risk}))});
+    if (req.method === 'GET' && url.pathname === '/api/state') {
+      const rd = n => { try { return JSON.parse(readFileSync(join(config.dataDir, n), 'utf8')); } catch { return null; } };
+      const jobs = (rd('jobs.json') || []).map(j => ({id: j.id, label: j.label, status: j.status, command: (j.command || '').slice(0, 60)}));
+      const schedules = (rd('schedules.json') || []).map(s => ({name: s.name, enabled: s.enabled, every: s.once ? 'once' : s.everyMinutes + 'm', next: s.nextRun, last: s.lastStatus}));
+      const servers = (rd('servers.json') || []).map(s => ({name: s.name, host: s.host, type: s.type || 'ssh'}));
+      const memory = Object.keys(rd('memory.json') || {});
+      const plan = rd('plan.json') || [];
+      return sendJson(res, 200, {version: VERSION, mode: currentMode(), dryRun: currentDryRun(), recent, tools: tools.map(t => ({name: t.name, risk: t.risk})), jobs, schedules, servers, memory, plan});
+    }
     if (req.method === 'POST' && url.pathname === '/api/mode') {
       const body = await readBody(req).catch(() => ({}));
       setMode(body?.mode); log('mode_changed', {mode: currentMode()});
       return sendJson(res, 200, {mode: currentMode()});
+    }
+    if (req.method === 'POST' && url.pathname === '/api/dryrun') {
+      const body = await readBody(req).catch(() => ({}));
+      setDryRun(!!body?.dryRun); log('dryrun_changed', {dryRun: currentDryRun()});
+      return sendJson(res, 200, {dryRun: currentDryRun()});
     }
     return sendJson(res, 404, {error: 'not found'});
   }

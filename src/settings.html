@@ -1,85 +1,106 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>PC Commands</title>
+<title>PC Commander</title>
 <style>
 :root{--bg:#0b0b12;--card:#15151f;--ink:#eef0ff;--mut:#9aa0c3;--edge:#2a2a38;--g:linear-gradient(135deg,#8b5cf6,#6366f1,#22d3ee)}
-*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 "Segoe UI",system-ui,sans-serif;display:flex;justify-content:center;padding:28px 16px}
-.wrap{width:100%;max-width:520px}
-h1{font-size:20px;margin:0 0 2px;display:flex;align-items:center;gap:10px}
-.logo{width:34px;height:34px;border-radius:10px;background:var(--g);display:grid;place-items:center}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 "Segoe UI",system-ui,sans-serif;padding:24px 16px 60px}
+.wrap{max-width:900px;margin:0 auto}
+h1{font-size:21px;margin:0 0 2px;display:flex;align-items:center;gap:10px}
+.logo{width:34px;height:34px;border-radius:10px;background:var(--g);display:grid;place-items:center;font-size:18px}
 .sub{color:var(--mut);font-size:13px;margin:0 0 20px}
-.card{background:var(--card);border:1px solid var(--edge);border-radius:16px;padding:20px;margin-bottom:16px}
-.lab{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--mut);margin:0 0 14px}
-.opt{display:flex;gap:12px;align-items:flex-start;padding:14px;border:1px solid var(--edge);border-radius:12px;cursor:pointer;margin-bottom:10px;transition:.15s}
-.opt:hover{border-color:#44465a}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+@media(max-width:680px){.grid{grid-template-columns:1fr}}
+.card{background:var(--card);border:1px solid var(--edge);border-radius:16px;padding:18px;margin-bottom:14px}
+.lab{font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:var(--mut);margin:0 0 12px;display:flex;justify-content:space-between}
+.lab b{color:#a5b4fc;font-weight:600}
+.opt{display:flex;gap:10px;align-items:flex-start;padding:12px;border:1px solid var(--edge);border-radius:11px;cursor:pointer;margin-bottom:8px}
 .opt.on{border-color:transparent;background:linear-gradient(var(--card),var(--card)) padding-box,var(--g) border-box;border:1px solid transparent;box-shadow:0 0 0 1px rgba(139,92,246,.4)}
-.opt .dot{width:20px;height:20px;border-radius:50%;border:2px solid #55566e;flex:none;margin-top:1px}
+.opt .dot{width:18px;height:18px;border-radius:50%;border:2px solid #55566e;flex:none;margin-top:1px}
 .opt.on .dot{border-color:#8b5cf6;background:radial-gradient(circle,#8b5cf6 45%,transparent 48%)}
-.opt b{display:block;font-size:15px}.opt span{color:var(--mut);font-size:13px}
-.state{font-size:13px;color:var(--mut);text-align:center}
-.state b{color:#34d399}
-.recent{max-height:220px;overflow:auto}
-.row{display:flex;gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid var(--edge);font-size:13px}
+.opt b{display:block}.opt span{color:var(--mut);font-size:12px}
+.toggle{display:flex;align-items:center;justify-content:space-between;padding:12px;border:1px solid var(--edge);border-radius:11px}
+.sw{width:46px;height:26px;border-radius:99px;background:#33334a;position:relative;cursor:pointer;transition:.15s;flex:none}
+.sw.on{background:#8b5cf6}.sw i{position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#fff;transition:.15s}.sw.on i{left:23px}
+.tools{display:flex;flex-wrap:wrap;gap:6px;max-height:140px;overflow:auto}
+.tool{font-size:11px;padding:3px 9px;border-radius:99px;border:1px solid var(--edge);display:flex;align-items:center;gap:5px}
+.tool i{width:6px;height:6px;border-radius:50%}.read{background:#34d399}.write{background:#fcd34d}.exec{background:#a5b4fc}
+.row{display:flex;gap:8px;align-items:center;padding:7px 0;border-bottom:1px solid var(--edge);font-size:12.5px}
 .row:last-child{border:0}
-.pill{font-size:11px;padding:2px 8px;border-radius:99px;flex:none}
-.pill.auto{background:rgba(52,211,153,.15);color:#6ee7b7}.pill.approved{background:rgba(99,102,241,.18);color:#a5b4fc}
-.pill.denied,.pill.timeout{background:rgba(251,113,133,.15);color:#fda4af}.pill.pending{background:rgba(251,191,36,.15);color:#fcd34d}
+.pill{font-size:10px;padding:2px 7px;border-radius:99px;flex:none}
+.pill.auto,.pill.running,.pill.on{background:rgba(52,211,153,.15);color:#6ee7b7}
+.pill.approved{background:rgba(99,102,241,.18);color:#a5b4fc}
+.pill.denied,.pill.off,.pill.error{background:rgba(251,113,133,.15);color:#fda4af}
+.pill.exited,.pill.stopped,.pill.pending{background:rgba(148,163,184,.15);color:#cbd5e1}
 .mono{font-family:Consolas,monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
-.t{color:#5f6488;font-size:11px;flex:none}
-.empty{color:var(--mut);text-align:center;padding:16px}
-.tools{display:flex;flex-wrap:wrap;gap:8px}
-.tool{font-size:12px;padding:4px 10px;border-radius:99px;border:1px solid var(--edge);display:flex;align-items:center;gap:6px}
-.tool i{width:7px;height:7px;border-radius:50%;display:inline-block}
-.tool .read{background:#34d399}.tool .write{background:#fcd34d}.tool .exec{background:#a5b4fc}
-.legend{font-size:11px;color:var(--mut);margin-top:10px;display:flex;gap:14px}
-.legend span{display:flex;align-items:center;gap:5px}
+.t{color:#5f6488;font-size:10px;flex:none}
+.empty{color:var(--mut);text-align:center;padding:12px;font-size:12px}
+.state{font-size:12px;color:var(--mut);text-align:center;margin-top:4px}.state b{color:#34d399}
 </style></head>
 <body><div class="wrap">
-<h1><span class="logo">⚡</span> PC Commands</h1>
-<p class="sub">How ChatGPT runs commands on this PC</p>
-<div class="card">
-  <p class="lab">Mode</p>
-  <div class="opt" id="ask" onclick="setMode('ask')"><span class="dot"></span><div><b>Ask each time</b><span>A dialog pops up on this PC for every command. You click Approve before it runs.</span></div></div>
-  <div class="opt" id="always" onclick="setMode('always')"><span class="dot"></span><div><b>Always allow</b><span>Commands run immediately with no prompt. Faster, but anything ChatGPT sends runs.</span></div></div>
-  <p class="state" id="state">…</p>
-</div>
-<div class="card">
-  <p class="lab">What it can do · <span id="toolcount">0</span> tools</p>
-  <div class="tools" id="tools"></div>
-  <div class="legend">
-    <span><i class="read"></i>reads (runs instantly)</span>
-    <span><i class="write"></i>changes files</span>
-    <span><i class="exec"></i>runs / launches</span>
+<h1><span class="logo">⚡</span> PC Commander</h1>
+<p class="sub">Control center · <span id="ver"></span></p>
+
+<div class="grid">
+  <div class="card">
+    <p class="lab">Permission mode</p>
+    <div class="opt" id="ask" onclick="setMode('ask')"><span class="dot"></span><div><b>Ask each time</b><span>Approve each change/command on this PC.</span></div></div>
+    <div class="opt" id="always" onclick="setMode('always')"><span class="dot"></span><div><b>Always allow</b><span>Run instantly, no prompt.</span></div></div>
+    <p class="state" id="modestate"></p>
+  </div>
+  <div class="card">
+    <p class="lab">Safety</p>
+    <div class="toggle"><div><b>Dry-run (preview)</b><br><span style="color:var(--mut);font-size:12px">Show what it WOULD do, change nothing.</span></div><div class="sw" id="dry" onclick="toggleDry()"><i></i></div></div>
+    <p class="state" style="margin-top:12px">Catastrophic actions are always blocked by the safety guard.</p>
   </div>
 </div>
+
+<div class="card">
+  <p class="lab">Capabilities <b id="toolcount">0 tools</b></p>
+  <div class="tools" id="tools"></div>
+</div>
+
+<div class="grid">
+  <div class="card"><p class="lab">Background jobs</p><div id="jobs"><div class="empty">None.</div></div></div>
+  <div class="card"><p class="lab">Scheduled tasks</p><div id="schedules"><div class="empty">None.</div></div></div>
+  <div class="card"><p class="lab">Servers</p><div id="servers"><div class="empty">None saved.</div></div></div>
+  <div class="card"><p class="lab">Memory</p><div id="memory"><div class="empty">Empty.</div></div></div>
+</div>
+
+<div class="card" id="plancard" style="display:none"><p class="lab">Current plan</p><div id="plan"></div></div>
+
 <div class="card">
   <p class="lab">Recent activity</p>
-  <div class="recent" id="recent"><div class="empty">Nothing yet.</div></div>
+  <div id="recent"><div class="empty">Nothing yet.</div></div>
 </div>
 </div>
 <script>
 const key = new URLSearchParams(location.search).get('key') || '';
+const q = p => p + (p.includes('?')?'&':'?') + 'key=' + encodeURIComponent(key);
 const esc = s => String(s??'').replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
-const ago = t => { const s=Math.round((Date.now()-t)/1000); return s<60?s+'s':s<3600?Math.round(s/60)+'m':Math.round(s/3600)+'h'; };
-async function load(){
-  const r = await fetch('/api/state?key='+encodeURIComponent(key)); if(!r.ok) return;
-  const s = await r.json(); paint(s);
+const ago = t => { if(!t) return ''; const s=Math.round((Date.now()-t)/1000); return s<0?'soon':s<60?s+'s':s<3600?Math.round(s/60)+'m':Math.round(s/3600)+'h'; };
+const when = t => t? new Date(t).toLocaleString([], {month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}) : '';
+let state={};
+async function load(){ try{ const r=await fetch(q('/api/state')); if(!r.ok) return; state=await r.json(); paint(); }catch{} }
+function paint(){
+  document.getElementById('ver').textContent = (state.version?'v'+state.version+' · ':'') + (state.tools?state.tools.length:0) + ' tools';
+  document.getElementById('ask').classList.toggle('on', state.mode==='ask');
+  document.getElementById('always').classList.toggle('on', state.mode==='always');
+  document.getElementById('modestate').innerHTML = state.mode==='always'?'Runs <b>without asking</b>.':'Waits for your <b>Approve</b>.';
+  document.getElementById('dry').classList.toggle('on', !!state.dryRun);
+  const T=state.tools||[]; document.getElementById('toolcount').textContent=T.length+' tools';
+  document.getElementById('tools').innerHTML=T.map(t=>`<span class="tool"><i class="${t.risk}"></i>${esc(t.name)}</span>`).join('');
+  listCard('jobs',(state.jobs||[]).map(j=>row(j.status,`${esc(j.label||j.command)}`,j.id)),'None.');
+  listCard('schedules',(state.schedules||[]).map(s=>row(s.enabled?'on':'off',`${esc(s.name)} · ${s.every}`, s.last||when(s.next))),'None.');
+  listCard('servers',(state.servers||[]).map(s=>row(s.type,`${esc(s.name)} · ${esc(s.host)}`,'')),'None saved.');
+  document.getElementById('memory').innerHTML=(state.memory&&state.memory.length)?state.memory.map(k=>`<div class="row"><span class="mono">🧠 ${esc(k)}</span></div>`).join(''):'<div class="empty">Empty.</div>';
+  const plan=state.plan||[]; document.getElementById('plancard').style.display=plan.length?'block':'none';
+  document.getElementById('plan').innerHTML=plan.map((s,i)=>`<div class="row"><span>${s.status==='done'?'☑':s.status==='in_progress'?'▶':'☐'}</span><span class="mono">${esc(s.text)}</span></div>`).join('');
+  const rec=state.recent||[]; document.getElementById('recent').innerHTML=rec.length?rec.map(c=>`<div class="row"><span class="pill ${c.decision}">${c.decision}</span><span class="mono">${esc(c.command)}</span><span class="t">${ago(c.t)}</span></div>`).join(''):'<div class="empty">Nothing yet.</div>';
 }
-function paint(s){
-  document.getElementById('ask').classList.toggle('on', s.mode==='ask');
-  document.getElementById('always').classList.toggle('on', s.mode==='always');
-  document.getElementById('state').innerHTML = s.mode==='always' ? 'Commands run <b>without asking</b>.' : 'Every command <b>waits for your Approve</b>.';
-  const el = document.getElementById('recent');
-  el.innerHTML = (s.recent&&s.recent.length) ? s.recent.map(c=>`<div class="row"><span class="pill ${c.decision}">${c.decision}</span><span class="mono">${esc(c.command)}</span><span class="t">${ago(c.t)}</span></div>`).join('') : '<div class="empty">Nothing yet.</div>';
-  if (s.tools) {
-    document.getElementById('toolcount').textContent = s.tools.length;
-    document.getElementById('tools').innerHTML = s.tools.map(t=>`<span class="tool"><i class="${t.risk}"></i>${esc(t.name)}</span>`).join('');
-  }
-}
-async function setMode(m){
-  const r = await fetch('/api/mode?key='+encodeURIComponent(key),{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({mode:m})});
-  if(r.ok) load();
-}
-load(); setInterval(load, 2000);
+function row(pill,text,right){ return `<div class="row">${pill?`<span class="pill ${pill}">${esc(pill)}</span>`:''}<span class="mono">${esc(text)}</span><span class="t">${esc(right||'')}</span></div>`; }
+function listCard(id,rows,empty){ document.getElementById(id).innerHTML=rows.length?rows.join(''):`<div class="empty">${empty}</div>`; }
+async function setMode(m){ await fetch(q('/api/mode'),{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({mode:m})}); load(); }
+async function toggleDry(){ await fetch(q('/api/dryrun'),{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({dryRun:!state.dryRun})}); load(); }
+load(); setInterval(load,2000);
 </script>
 </body></html>

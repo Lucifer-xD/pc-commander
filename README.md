@@ -122,6 +122,28 @@ Beyond doing things *right now*, PC Commander can remember, run on a schedule, r
 
 ---
 
+## 🧠 Full agent mode
+
+PC Commander isn't just a pile of tools — it can plan, edit code, drive a browser, and even run itself.
+
+| Area | Tools | What it unlocks |
+|---|---|---|
+| **🤯 Autonomous engine** | `configure_agent` · `agent_task` · `agent_status` | Give it a **goal** and it plans → acts → checks → repeats **on its own**, using all its tools, then reports back. Powered by your own LLM key (OpenAI / Groq / local Ollama / LM Studio — anything OpenAI-compatible). |
+| **👨‍💻 Developer agent** | `update_plan` · `apply_edits` · `write_files` · `git` · `project_tree` | Works like a coding agent: keeps a to-do list, edits many files atomically, scaffolds projects, runs git, maps a codebase. |
+| **🌍 Web agent** | `browser_open` · `browser_read` · `browser_click` · `browser_type` · `browser_eval` · `browser_screenshot` | Drives a **real browser** (your installed Chrome/Edge) — log in, click, fill forms, scrape, operate web apps. Run `npm run install-browser` once to enable. |
+| **🛡️ Safety net** | `undo_last` · `restore_backup` · `list_backups` · `set_dry_run` · `store_secret` | Deletes go to the **Recycle Bin**; every change is snapshotted (undo anytime); **dry-run** previews without doing; secrets are **encrypted** and used via `${secret:NAME}` so they never appear in chat. |
+| **🎛️ Control center** | the settings page | A live dashboard: mode, dry-run, every capability, running jobs, schedules, servers, memory, and recent activity at a glance. |
+
+**Example — hand it a whole job:**
+
+> *"**Autonomous task:** create a Python project in C:\\dev\\scraper, write a script that pulls the top Hacker News titles, run it, save the output to titles.txt, and tell me when it's done."*
+
+With the autonomous engine configured, it'll plan the steps, create the files, run it, fix any errors, and report back — on its own.
+
+> ⚠️ The autonomous engine acts without asking between steps (you approve *launching* it). Catastrophic actions are still blocked by the safety guard, and sensitive ones are skipped. Keep **dry-run** on while you're learning to trust it.
+
+---
+
 ## ✅ What you'll need
 
 | | |
