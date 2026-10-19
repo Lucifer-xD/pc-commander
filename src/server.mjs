@@ -26,10 +26,11 @@ import {makeSecretTools} from './secrets.mjs';
 import {makeDevTools} from './dev.mjs';
 import {makeBrowserTools} from './browser.mjs';
 import {makeAgentTools} from './agent.mjs';
+import {makeSubagentTools} from './subagents.mjs';
 import {loadGuard, assess} from './guard.mjs';
 import {z} from 'zod';
 
-const VERSION = '0.8.0';
+const VERSION = '0.9.0';
 const config = loadConfig();
 const log = createLog(join(ROOT, 'logs', 'connector.log'));
 const SETTINGS = readFileSync(new URL('./settings.html', import.meta.url), 'utf8');
@@ -66,7 +67,7 @@ async function runToolAutonomous(name, args) {
   catch (e) { return 'ERROR: ' + e.message; }
 }
 
-const tools = [...baseTools, ...makeAgentTools(config, {tools: baseTools, runTool: runToolAutonomous})];
+const tools = [...baseTools, ...makeAgentTools(config, {tools: baseTools, runTool: runToolAutonomous}), ...makeSubagentTools(config, {tools: baseTools, runTool: runToolAutonomous})];
 
 // Simple rate limiter: cap tool invocations per rolling minute (runaway-loop guard).
 const MAX_PER_MIN = config.maxPerMinute || 120;

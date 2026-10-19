@@ -129,6 +129,7 @@ PC Commander isn't just a pile of tools — it can plan, edit code, drive a brow
 | Area | Tools | What it unlocks |
 |---|---|---|
 | **🤯 Autonomous engine** | `configure_agent` · `agent_task` · `agent_status` | Give it a **goal** and it plans → acts → checks → repeats **on its own**, using all its tools, then reports back. Powered by your own LLM key (OpenAI / Groq / local Ollama / LM Studio — anything OpenAI-compatible). |
+| **🧑‍🤝‍🧑 Subagents** | `spawn_subagent` · `subagent_status` · `list_subagents` · `subagent_result` · `stop_subagent` | Run **several autonomous workers in parallel**. ChatGPT (single-threaded in Chat) dispatches tasks; each subagent is its own plan→act→observe loop with a **scoped** toolset, running in the background. |
 | **👨‍💻 Developer agent** | `update_plan` · `apply_edits` · `write_files` · `git` · `project_tree` | Works like a coding agent: keeps a to-do list, edits many files atomically, scaffolds projects, runs git, maps a codebase. |
 | **🌍 Web agent** | `browser_open` · `browser_read` · `browser_click` · `browser_type` · `browser_eval` · `browser_screenshot` | Drives a **real browser** (your installed Chrome/Edge) — log in, click, fill forms, scrape, operate web apps. Run `npm run install-browser` once to enable. |
 | **🛡️ Safety net** | `undo_last` · `restore_backup` · `list_backups` · `set_dry_run` · `store_secret` | Deletes go to the **Recycle Bin**; every change is snapshotted (undo anytime); **dry-run** previews without doing; secrets are **encrypted** and used via `${secret:NAME}` so they never appear in chat. |
@@ -141,6 +142,14 @@ PC Commander isn't just a pile of tools — it can plan, edit code, drive a brow
 With the autonomous engine configured, it'll plan the steps, create the files, run it, fix any errors, and report back — on its own.
 
 > ⚠️ The autonomous engine acts without asking between steps (you approve *launching* it). Catastrophic actions are still blocked by the safety guard, and sensitive ones are skipped. Keep **dry-run** on while you're learning to trust it.
+
+### 🧑‍🤝‍🧑 Subagents — a team that works in parallel
+
+ChatGPT in the **Chat** tab is single-threaded — it can't fan work out on its own. Subagents fix that: ChatGPT dispatches tasks and **PC Commander runs the workers**. Each `spawn_subagent` starts an autonomous worker in the **background** (its own plan→act→observe loop) and returns immediately, so you can spawn several and they run **in parallel**. Each gets a **scoped** toolset via a role — `coder` (edit + run), `tester` (read + run, no writes), `researcher` (read-only + web), or `full` — or an explicit tool allow-list. Poll with `subagent_status` / `list_subagents`, collect with `subagent_result`, stop one with `stop_subagent`.
+
+> *"Spawn three subagents: one to add input validation to the auth module (coder), one to write tests for the payments module (coder), and one to audit the repo for TODOs (researcher). Tell me when each finishes."*
+
+Subagents use the same engine as `agent_task`, so **`configure_agent` must be set first**. They're guard-checked (catastrophic actions blocked, sensitive ones skipped), the PC is kept awake while any run, and you get a notification when each finishes.
 
 ---
 

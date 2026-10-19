@@ -32,13 +32,59 @@ function jsch(zt) {
 }
 function params(shape) { const p = {type: 'object', properties: {}, required: []}; for (const [k, v] of Object.entries(shape)) { p.properties[k] = jsch(v); if (!isOpt(v)) p.required.push(k); } return p; }
 
+// ---- shared pieces, reused by both agent_task and the subagent system ----
+export const DEFAULT_SYS = 'You are an autonomous agent operating the user\'s computer through the provided tools. '
+  + 'Accomplish the GOAL by calling tools step by step. Think briefly, then act. Verify results. '
+  + 'Keep going until the goal is fully done, then give a short final summary WITHOUT calling a tool. '
+  + 'Be careful and never do anything destructive that the goal did not ask for.';
+
+// Build OpenAI function-calling tool defs from a list of connector tools.
+export function buildToolDefs(toolList) {
+  return toolList.map(t => ({type: 'function', function: {name: t.name, description: t.description.slice(0, 1024), parameters: params(t.shape)}}));
+}
+
+// Read the autonomous-engine config (model + baseUrl) from disk.
+export function loadAgentCfg(config) { try { return JSON.parse(readFileSync(join(config.dataDir, 'agent.json'), 'utf8')); } catch { return {}; } }
+
+// The core autonomous loop: plan -> call tool(s) -> observe -> repeat until the
+// model answers without a tool call (or the cap/cancel is hit). `runTool` must
+// return a STRING (already guard-checked). Throws on a fatal LLM error.
+export async function runAgentLoop({cfg, key, goal, systemPrompt, toolDefs, runTool, cap = 20, onStep, isCancelled}) {
+  const messages = [{role: 'system', content: systemPrompt || DEFAULT_SYS}, {role: 'user', content: 'GOAL: ' + goal}];
+  const transcript = []; let final = '';
+  for (let step = 0; step < cap; step++) {
+    if (isCancelled && isCancelled()) { final = '(cancelled)'; break; }
+    const res = await fetch(cfg.baseUrl.replace(/\/$/, '') + '/chat/completions', {
+      method: 'POST', headers: {'content-type': 'application/json', authorization: 'Bearer ' + key},
+      body: JSON.stringify({model: cfg.model, messages, tools: toolDefs, tool_choice: 'auto', temperature: 0}),
+    });
+    if (!res.ok) throw new Error(`LLM call failed (HTTP ${res.status}): ${(await res.text()).slice(0, 300)}`);
+    const data = await res.json();
+    const msg = data.choices?.[0]?.message;
+    if (!msg) throw new Error('LLM returned no message.');
+    messages.push(msg);
+    if (msg.tool_calls?.length) {
+      for (const tc of msg.tool_calls) {
+        if (isCancelled && isCancelled()) break;
+        let args = {}; try { args = JSON.parse(tc.function.arguments || '{}'); } catch {}
+        const result = await runTool(tc.function.name, args);
+        const line = `▶ ${tc.function.name}(${short(args, 80)}) → ${short(result, 200)}`;
+        transcript.push(line);
+        if (onStep) { try { onStep(line, transcript.length); } catch {} }
+        messages.push({role: 'tool', tool_call_id: tc.id, content: String(result).slice(0, 6000)});
+      }
+    } else { final = msg.content || ''; break; }
+  }
+  if (!final) final = '(reached the step limit without a final summary)';
+  return {transcript, final, steps: transcript.length};
+}
+
 export function makeAgentTools(config, {tools, runTool}) {
   const cfgFile = join(config.dataDir, 'agent.json');
-  const loadCfg = () => { try { return JSON.parse(readFileSync(cfgFile, 'utf8')); } catch { return {}; } };
+  const loadCfg = () => loadAgentCfg(config);
 
   // tools the autonomous agent may use (exclude itself and config tools).
   const usable = () => tools.filter(t => !['agent_task', 'configure_agent', 'agent_status'].includes(t.name));
-  const toolDefs = () => usable().map(t => ({type: 'function', function: {name: t.name, description: t.description.slice(0, 1024), parameters: params(t.shape)}}));
 
   return [
     {
@@ -73,38 +119,10 @@ export function makeAgentTools(config, {tools, runTool}) {
         if (!cfg.model) return fail('The autonomous engine is not configured. Use configure_agent (model + api_key) first.');
         const key = getSecret(config.dataDir, 'AGENT_KEY') || 'local';
         const cap = Math.min(max_steps || 20, 40);
-        const sys = 'You are an autonomous agent operating the user\'s computer through the provided tools. '
-          + 'Accomplish the GOAL by calling tools step by step. Think briefly, then act. Verify results. '
-          + 'Keep going until the goal is fully done, then give a short final summary WITHOUT calling a tool. '
-          + 'Be careful and never do anything destructive that the goal did not ask for.';
-        const messages = [{role: 'system', content: sys}, {role: 'user', content: 'GOAL: ' + goal}];
-        const defs = toolDefs();
-        const transcript = [];
-        let final = '';
-        for (let step = 0; step < cap; step++) {
-          let data;
-          try {
-            const res = await fetch(cfg.baseUrl.replace(/\/$/, '') + '/chat/completions', {
-              method: 'POST', headers: {'content-type': 'application/json', authorization: 'Bearer ' + key},
-              body: JSON.stringify({model: cfg.model, messages, tools: defs, tool_choice: 'auto', temperature: 0}),
-            });
-            if (!res.ok) return fail(`LLM call failed (HTTP ${res.status}): ${(await res.text()).slice(0, 300)}`);
-            data = await res.json();
-          } catch (e) { return fail(`LLM call error: ${e.message}`); }
-          const msg = data.choices?.[0]?.message;
-          if (!msg) return fail('LLM returned no message.');
-          messages.push(msg);
-          if (msg.tool_calls?.length) {
-            for (const tc of msg.tool_calls) {
-              let args = {}; try { args = JSON.parse(tc.function.arguments || '{}'); } catch {}
-              const result = await runTool(tc.function.name, args);
-              transcript.push(`▶ ${tc.function.name}(${short(args, 80)}) → ${short(result, 200)}`);
-              messages.push({role: 'tool', tool_call_id: tc.id, content: String(result).slice(0, 6000)});
-            }
-          } else { final = msg.content || ''; break; }
-        }
-        if (!final) final = '(reached the step limit without a final summary)';
-        return text(`AUTONOMOUS TASK COMPLETE\n\nSteps (${transcript.length}):\n${transcript.join('\n') || '(none)'}\n\n--- result ---\n${final}`);
+        try {
+          const {transcript, final} = await runAgentLoop({cfg, key, goal, toolDefs: buildToolDefs(usable()), runTool, cap});
+          return text(`AUTONOMOUS TASK COMPLETE\n\nSteps (${transcript.length}):\n${transcript.join('\n') || '(none)'}\n\n--- result ---\n${final}`);
+        } catch (e) { return fail(`Autonomous task failed: ${e.message}`); }
       },
     },
   ];
