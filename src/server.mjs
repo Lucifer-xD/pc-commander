@@ -13,13 +13,14 @@ import {loadConfig, ROOT} from './config.mjs';
 import {requestApproval, autoApproved} from './approve.mjs';
 import {createLog} from './log.mjs';
 import {makeTools} from './tools.mjs';
+import {makeRemoteTools} from './remote.mjs';
 
-const VERSION = '0.3.0';
+const VERSION = '0.4.0';
 const config = loadConfig();
 const log = createLog(join(ROOT, 'logs', 'connector.log'));
 const SETTINGS = readFileSync(new URL('./settings.html', import.meta.url), 'utf8');
 const modeFile = join(config.dataDir, 'mode.json');
-const tools = makeTools(config);
+const tools = [...makeTools(config), ...makeRemoteTools(config)];
 const recent = [];
 
 function currentMode() {

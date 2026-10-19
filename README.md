@@ -73,6 +73,28 @@ PC Commander gives ChatGPT a real toolbox, not just a command line. Each tool is
 
 ---
 
+## 🌍 Control your other machines too (VPS · remote Windows · RDP)
+
+PC Commander isn't limited to the PC it runs on. Tell it about your servers once, then command them all from the same chat.
+
+| Tool | What it does | |
+|---|---|---|
+| `add_server` / `list_servers` / `remove_server` | Save your servers by nickname (uses SSH keys — no passwords stored) | 🟡🟢 |
+| `ssh_run` | Run commands on a Linux **VPS** over SSH — install, deploy, restart services, read logs | 🔵 |
+| `ssh_copy` | Upload/download files to/from a server (SCP) | 🔵 |
+| `winrm_run` | Run PowerShell on a remote **Windows** machine | 🔵 |
+| `rdp_connect` | Open a **Remote Desktop** session to a Windows server | 🔵 |
+
+**Example:**
+
+> *"Save my server: nickname **london**, host 203.0.113.9, user root, key `~/.ssh/id_ed25519`."*
+> *"On **london**, how much disk is free and is nginx running?"*
+> *"Deploy the latest build to **london** and restart the service."*
+
+<sub>💡 For SSH, set up key login first (`ssh-copy-id user@host`) — it's safer than passwords and lets the agent connect without prompts. For `winrm_run`, the remote Windows box needs PowerShell Remoting enabled. For `rdp_connect`, the remote desktop window opens on your PC for you to finish signing in.</sub>
+
+---
+
 ## ✅ What you'll need
 
 | | |
