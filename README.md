@@ -259,6 +259,28 @@ stay in the normal chat. Every action already asks me to approve it on my PC.
 
 ---
 
+## ♻️ It stays alive by itself (reboot · sleep · crash)
+
+You never have to start anything by hand. The installer sets up three things that run quietly in the background with **no window and no admin rights**:
+
+| Piece | What it does |
+|---|---|
+| **Server** | the connector itself, on `:8787` |
+| **Tunnel** | the Cloudflare link that gives ChatGPT a public URL *(only if you set up a permanent domain)* |
+| **Watchdog** | a tiny loop that checks the other two every 30 seconds and restarts whatever stopped answering |
+
+So if any of these happens, it fixes itself within about half a minute — you don't have to touch it:
+
+- 🔌 **You restart your PC** → everything comes back at logon.
+- 😴 **Your laptop sleeps and wakes** → the watchdog notices the public link went quiet and re-dials the tunnel. *(This is the classic "it worked, then ChatGPT suddenly couldn't reach my PC" problem — handled.)*
+- 💥 **The server or tunnel crashes** → the watchdog restarts it.
+
+It's careful about it, too: it only ever restarts the tunnel when the public URL has genuinely gone dark (not when a page just returns an error), and it never touches other `cloudflared` tunnels you may be running for something else.
+
+<sub>Want to see what it's been doing? Open **`scripts\autostart\watchdog.log`**. Want to turn auto-start off? Press **Start**, type `shell:startup`, Enter, and delete the **PC Commander** shortcuts.</sub>
+
+---
+
 ## 🎚️ How careful should it be?
 
 You decide how much it asks before doing things. Open the settings page (the installer put a shortcut on your Desktop, or use the `http://127.0.0.1:8787/...` link from Step 2):
