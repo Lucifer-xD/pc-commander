@@ -1,47 +1,67 @@
-// The agent's capabilities. Each tool declares a risk level that decides whether
-// it runs straight away or waits for a local Approve click:
+// The agent's core capabilities. Each tool declares a risk level that decides
+// whether it runs straight away or waits for a local Approve click:
 //   read  - inspects the machine, never changes it -> auto (no prompt)
 //   write - creates/changes/deletes files          -> prompt (unless Always-allow)
 //   exec  - runs code / launches / kills / captures -> prompt (unless Always-allow)
-import {readFileSync, writeFileSync, appendFileSync, statSync, readdirSync, existsSync, mkdirSync, rmSync, renameSync, mkdtempSync} from 'node:fs';
-import {join, resolve, dirname, basename, extname} from 'node:path';
+// Cross-platform: file tools use Node fs; system/screen tools branch per OS.
+import {readFileSync, writeFileSync, appendFileSync, statSync, readdirSync, existsSync, mkdirSync, rmSync, renameSync, cpSync, mkdtempSync} from 'node:fs';
+import {join, resolve, dirname} from 'node:path';
 import {tmpdir, homedir} from 'node:os';
 import {fileURLToPath} from 'node:url';
 import {z} from 'zod';
 import {runCommand} from './exec.mjs';
+import {isWin, isMac} from './shell.mjs';
 
 const SHOT = fileURLToPath(new URL('./screenshot.ps1', import.meta.url));
 const text = t => ({content: [{type: 'text', text: String(t)}]});
 const fail = t => ({isError: true, content: [{type: 'text', text: String(t)}]});
 const home = () => process.env.USERPROFILE || homedir();
-const abs = p => resolve(p.replace(/^~(?=[\\/]|$)/, home()));
+const abs = p => resolve(String(p).replace(/^~(?=[\\/]|$)/, home()));
 const human = n => n < 1024 ? n + ' B' : n < 1048576 ? (n / 1024).toFixed(1) + ' KB' : n < 1073741824 ? (n / 1048576).toFixed(1) + ' MB' : (n / 1073741824).toFixed(2) + ' GB';
-const CAP = 200000; // max chars returned from a file/listing
+const CAP = 200000;
+const wildToRe = g => new RegExp('^' + g.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*').replace(/\?/g, '.') + '$', 'i');
 
-// Run a PowerShell snippet and return trimmed stdout (or throw on stderr/exit).
-async function ps(command, {timeoutMs = 60000} = {}) {
+async function sh(command, {timeoutMs = 60000} = {}) {
   const r = await runCommand({command, cwd: home(), timeoutMs, maxOutputChars: CAP});
   if (r.timedOut) throw new Error('timed out');
   return {out: (r.stdout || '').trimEnd(), err: (r.stderr || '').trimEnd(), code: r.exitCode};
+}
+
+// Bounded recursive walk (portable). Calls visit(fullPath, dirent); stop when budget hits 0.
+function walk(root, visit, {maxVisits = 50000} = {}) {
+  let budget = maxVisits;
+  const stack = [root];
+  const SKIP = new Set(['node_modules', '.git', '$Recycle.Bin', 'Windows', 'AppData']);
+  while (stack.length && budget > 0) {
+    const dir = stack.pop();
+    let entries;
+    try { entries = readdirSync(dir, {withFileTypes: true}); } catch { continue; }
+    for (const e of entries) {
+      if (budget-- <= 0) break;
+      const full = join(dir, e.name);
+      visit(full, e);
+      if (e.isDirectory() && !SKIP.has(e.name)) stack.push(full);
+    }
+  }
 }
 
 export function makeTools(config) {
   const cmdTimeout = config.commandTimeoutMs || 110000;
 
   return [
-    // ---- exec -------------------------------------------------------------
+    // ---- exec: shell -----------------------------------------------------
     {
       name: 'run_command',
       risk: 'exec',
       description:
-        'Run any PowerShell command or script on the user\'s own Windows PC and return stdout, stderr and exit code. ' +
+        `Run any ${isWin ? 'PowerShell' : 'shell'} command or script on the user's own computer and return stdout, stderr and exit code. ` +
         'This is the user\'s personal machine and they have authorized it. Use it for anything the other tools don\'t cover: ' +
-        'git, builds, tests, installing packages, networking, scheduled tasks, registry, etc. Prefer one self-contained command per call.',
+        'git, builds, tests, installing packages, networking, services, etc. Prefer one self-contained command per call.',
       shape: {
-        command: z.string().describe('The exact PowerShell command or script.'),
+        command: z.string().describe(`The exact ${isWin ? 'PowerShell' : 'shell'} command or script.`),
         cwd: z.string().optional().describe('Absolute working directory. Defaults to the user home.'),
       },
-      summarize: a => ({title: 'Run a PowerShell command', detail: a.command}),
+      summarize: a => ({title: `Run a ${isWin ? 'PowerShell' : 'shell'} command`, detail: a.command}),
       run: async ({command, cwd}) => {
         const r = await runCommand({command, cwd: cwd || config.defaultCwd, timeoutMs: cmdTimeout, maxOutputChars: config.maxOutputChars || CAP});
         const parts = [`exit code: ${r.timedOut ? 'timed out' : r.exitCode}`, `cwd: ${r.cwd}`];
@@ -52,15 +72,11 @@ export function makeTools(config) {
       },
     },
 
-    // ---- read: files & folders -------------------------------------------
+    // ---- read: files & folders (portable) --------------------------------
     {
-      name: 'read_file',
-      risk: 'read',
-      description: 'Read a text file on the PC and return its contents. Use for config files, logs, code, notes, etc.',
-      shape: {
-        path: z.string().describe('Absolute path to the file (~ allowed for the home folder).'),
-        max_bytes: z.number().optional().describe('Cap on bytes to read (default 200000).'),
-      },
+      name: 'read_file', risk: 'read',
+      description: 'Read a text file on the computer and return its contents.',
+      shape: {path: z.string().describe('Absolute path (~ allowed).'), max_bytes: z.number().optional()},
       summarize: a => ({title: 'Read a file', detail: a.path}),
       run: async ({path, max_bytes}) => {
         const p = abs(path);
@@ -75,10 +91,9 @@ export function makeTools(config) {
       },
     },
     {
-      name: 'list_dir',
-      risk: 'read',
+      name: 'list_dir', risk: 'read',
       description: 'List the contents of a folder (names, type, size, modified date).',
-      shape: {path: z.string().optional().describe('Folder path. Defaults to the home folder.')},
+      shape: {path: z.string().optional().describe('Folder path. Defaults to home.')},
       summarize: a => ({title: 'List a folder', detail: a.path || '(home)'}),
       run: async ({path}) => {
         const p = abs(path || home());
@@ -92,111 +107,96 @@ export function makeTools(config) {
       },
     },
     {
-      name: 'find_files',
-      risk: 'read',
-      description: 'Find files/folders by name pattern under a folder (recursive). Great for "where is X" questions.',
-      shape: {
-        pattern: z.string().describe('Wildcard name pattern, e.g. *.pdf, invoice*, *.log'),
-        path: z.string().optional().describe('Folder to search under. Defaults to the home folder.'),
-        max_results: z.number().optional().describe('Default 200.'),
-      },
-      summarize: a => ({title: 'Search for files by name', detail: `${a.pattern} in ${a.path || '(home)'}`}),
+      name: 'find_files', risk: 'read',
+      description: 'Find files/folders by name pattern under a folder (recursive). Great for "where is X".',
+      shape: {pattern: z.string().describe('Wildcard, e.g. *.pdf, invoice*'), path: z.string().optional(), max_results: z.number().optional()},
+      summarize: a => ({title: 'Find files by name', detail: `${a.pattern} in ${a.path || '(home)'}`}),
       run: async ({pattern, path, max_results}) => {
         const root = abs(path || home());
-        const limit = max_results || 200;
-        const cmd = `Get-ChildItem -LiteralPath '${root.replace(/'/g, "''")}' -Recurse -Filter '${pattern.replace(/'/g, "''")}' -ErrorAction SilentlyContinue | Select-Object -First ${limit} -ExpandProperty FullName`;
-        const r = await ps(cmd, {timeoutMs: 90000});
-        return text(r.out ? `Matches for "${pattern}" under ${root}:\n\n${r.out}` : `No files matching "${pattern}" under ${root}.`);
+        if (!existsSync(root)) return fail(`No such folder: ${root}`);
+        const re = wildToRe(pattern); const limit = max_results || 200; const hits = [];
+        walk(root, (full, e) => { if (hits.length < limit && re.test(e.name)) hits.push(full); });
+        return text(hits.length ? `Matches for "${pattern}" under ${root}:\n\n${hits.join('\n')}` : `No files matching "${pattern}" under ${root}.`);
       },
     },
     {
-      name: 'search_in_files',
-      risk: 'read',
-      description: 'Search file CONTENTS for text/regex under a folder (like grep). Returns matching lines with file and line number.',
-      shape: {
-        query: z.string().describe('Text or regular expression to find inside files.'),
-        path: z.string().optional().describe('Folder to search under. Defaults to the home folder.'),
-        include: z.string().optional().describe('Only files matching this wildcard, e.g. *.js, *.txt'),
-        max_results: z.number().optional().describe('Default 200.'),
-      },
+      name: 'search_in_files', risk: 'read',
+      description: 'Search file CONTENTS for text/regex under a folder (like grep). Returns path:line: text.',
+      shape: {query: z.string(), path: z.string().optional(), include: z.string().optional().describe('Only files matching this wildcard, e.g. *.js'), max_results: z.number().optional()},
       summarize: a => ({title: 'Search inside files', detail: `"${a.query}" in ${a.path || '(home)'}`}),
       run: async ({query, path, include, max_results}) => {
         const root = abs(path || home());
-        const limit = max_results || 200;
-        const inc = include ? ` -Include '${include.replace(/'/g, "''")}'` : '';
-        const cmd = `Get-ChildItem -LiteralPath '${root.replace(/'/g, "''")}' -Recurse -File${inc} -ErrorAction SilentlyContinue | Select-String -Pattern '${query.replace(/'/g, "''")}' -ErrorAction SilentlyContinue | Select-Object -First ${limit} | ForEach-Object { "$($_.Path):$($_.LineNumber): $($_.Line.Trim())" }`;
-        const r = await ps(cmd, {timeoutMs: 120000});
-        return text(r.out ? `Matches for "${query}" under ${root}:\n\n${r.out}` : `No matches for "${query}" under ${root}.`);
+        if (!existsSync(root)) return fail(`No such folder: ${root}`);
+        let re; try { re = new RegExp(query, 'i'); } catch { return fail('Invalid search pattern.'); }
+        const inc = include ? wildToRe(include) : null;
+        const limit = max_results || 200; const hits = [];
+        walk(root, (full, e) => {
+          if (hits.length >= limit || !e.isFile() || (inc && !inc.test(e.name))) return;
+          try { if (statSync(full).size > 2_000_000) return; const lines = readFileSync(full, 'utf8').split(/\r?\n/);
+            for (let i = 0; i < lines.length && hits.length < limit; i++) if (re.test(lines[i])) hits.push(`${full}:${i + 1}: ${lines[i].trim().slice(0, 200)}`);
+          } catch {}
+        });
+        return text(hits.length ? `Matches for "${query}" under ${root}:\n\n${hits.join('\n')}` : `No matches for "${query}" under ${root}.`);
       },
     },
 
-    // ---- read: system -----------------------------------------------------
+    // ---- read: system (per-OS) -------------------------------------------
     {
-      name: 'system_info',
-      risk: 'read',
-      description: 'A quick snapshot of the PC: OS/version, CPU, RAM used/total, disk free/total per drive, uptime, computer name.',
+      name: 'system_info', risk: 'read',
+      description: 'A quick snapshot: OS, CPU, RAM used/total, disk free/total, uptime, computer name.',
       shape: {},
       summarize: () => ({title: 'Read system info', detail: 'OS, CPU, RAM, disks, uptime'}),
       run: async () => {
-        const cmd = String.raw`
+        if (isWin) {
+          const cmd = String.raw`
 $os=Get-CimInstance Win32_OperatingSystem; $cs=Get-CimInstance Win32_ComputerSystem; $cpu=(Get-CimInstance Win32_Processor | Select-Object -First 1)
 $ramTot=[math]::Round($cs.TotalPhysicalMemory/1GB,1); $ramFree=[math]::Round($os.FreePhysicalMemory/1MB/1024,1)
-"Computer : $($cs.Name)"
-"OS       : $($os.Caption) $($os.Version)"
+"Computer : $($cs.Name)"; "OS       : $($os.Caption) $($os.Version)"
 "CPU      : $($cpu.Name.Trim()) ($($cpu.NumberOfLogicalProcessors) threads)"
 "RAM      : $([math]::Round($ramTot-$ramFree,1)) GB used / $ramTot GB"
 "Uptime   : $([math]::Round(((Get-Date)-$os.LastBootUpTime).TotalHours,1)) h"
 Get-CimInstance Win32_LogicalDisk -Filter "DriveType=3" | ForEach-Object { "Disk $($_.DeviceID)  $([math]::Round($_.FreeSpace/1GB,1)) GB free / $([math]::Round($_.Size/1GB,1)) GB" }`;
-        const r = await ps(cmd, {timeoutMs: 30000});
-        return text(r.out || r.err || '(no data)');
+          return text((await sh(cmd, {timeoutMs: 30000})).out);
+        }
+        const cmd = isMac
+          ? 'echo "Computer : $(scutil --get ComputerName 2>/dev/null || hostname)"; echo "OS       : $(sw_vers -productName) $(sw_vers -productVersion)"; echo "CPU      : $(sysctl -n machdep.cpu.brand_string) ($(sysctl -n hw.logicalcpu) threads)"; echo "RAM      : $(echo $(sysctl -n hw.memsize)/1073741824 | bc) GB"; echo "Uptime   : $(uptime)"; df -h /'
+          : 'echo "Computer : $(hostname)"; echo "OS       : $(. /etc/os-release 2>/dev/null; echo $PRETTY_NAME) $(uname -r)"; echo "CPU      : $(grep -m1 "model name" /proc/cpuinfo | cut -d: -f2 | xargs) ($(nproc) threads)"; echo "RAM      :"; free -h | awk "/Mem:/{print \$3\" used / \"\$2}"; echo "Uptime   : $(uptime -p)"; df -h /';
+        return text((await sh(cmd, {timeoutMs: 30000})).out);
       },
     },
     {
-      name: 'list_processes',
-      risk: 'read',
-      description: 'List running processes, by default the heaviest ones (by memory). Optionally filter by name.',
-      shape: {
-        name: z.string().optional().describe('Only processes whose name contains this.'),
-        top: z.number().optional().describe('How many to return (default 20).'),
-      },
-      summarize: a => ({title: 'List processes', detail: a.name ? `name ~ ${a.name}` : `top ${a.top || 20} by memory`}),
+      name: 'list_processes', risk: 'read',
+      description: 'List running processes, by default the heaviest by memory. Optionally filter by name.',
+      shape: {name: z.string().optional(), top: z.number().optional()},
+      summarize: a => ({title: 'List processes', detail: a.name ? `name ~ ${a.name}` : `top ${a.top || 20}`}),
       run: async ({name, top}) => {
         const n = top || 20;
-        const filt = name ? `Where-Object { $_.ProcessName -like '*${name.replace(/'/g, "''")}*' } | ` : '';
-        const cmd = `Get-Process | ${filt}Sort-Object WS -Descending | Select-Object -First ${n} Id,ProcessName,@{n='Mem(MB)';e={[math]::Round($_.WS/1MB,1)}},@{n='CPU(s)';e={[math]::Round($_.CPU,1)}} | Format-Table -AutoSize | Out-String -Width 120`;
-        const r = await ps(cmd, {timeoutMs: 30000});
-        return text(r.out || '(none)');
+        if (isWin) {
+          const filt = name ? `Where-Object { $_.ProcessName -like '*${name.replace(/'/g, "''")}*' } | ` : '';
+          const cmd = `Get-Process | ${filt}Sort-Object WS -Descending | Select-Object -First ${n} Id,ProcessName,@{n='Mem(MB)';e={[math]::Round($_.WS/1MB,1)}},@{n='CPU(s)';e={[math]::Round($_.CPU,1)}} | Format-Table -AutoSize | Out-String -Width 120`;
+          return text((await sh(cmd, {timeoutMs: 30000})).out || '(none)');
+        }
+        const grep = name ? ` | grep -i '${name.replace(/'/g, "'\\''")}'` : '';
+        return text((await sh(`ps aux --sort=-%mem 2>/dev/null | head -n ${n + 1}${grep} || ps aux | head -n ${n + 1}`, {timeoutMs: 30000})).out || '(none)');
       },
     },
 
-    // ---- write: files -----------------------------------------------------
+    // ---- write: files (portable) -----------------------------------------
     {
-      name: 'write_file',
-      risk: 'write',
-      description: 'Create a new file or overwrite an existing one with the given text. Creates parent folders as needed.',
-      shape: {
-        path: z.string().describe('Absolute path to write (~ allowed).'),
-        content: z.string().describe('Full text content to write.'),
-        append: z.boolean().optional().describe('If true, add to the end instead of overwriting.'),
-      },
+      name: 'write_file', risk: 'write',
+      description: 'Create a new file or overwrite an existing one. Creates parent folders as needed.',
+      shape: {path: z.string(), content: z.string(), append: z.boolean().optional()},
       summarize: a => ({title: a.append ? 'Append to a file' : 'Write a file', detail: `${abs(a.path)}\n\n${a.content.slice(0, 1500)}${a.content.length > 1500 ? '\n…' : ''}`}),
       run: async ({path, content, append}) => {
-        const p = abs(path);
-        mkdirSync(dirname(p), {recursive: true});
+        const p = abs(path); mkdirSync(dirname(p), {recursive: true});
         if (append) appendFileSync(p, content, 'utf8'); else writeFileSync(p, content, 'utf8');
         return text(`${append ? 'Appended to' : 'Wrote'} ${p} (${human(Buffer.byteLength(content))}).`);
       },
     },
     {
-      name: 'edit_file',
-      risk: 'write',
-      description: 'Find and replace text inside an existing file. By default replaces the first match; set all=true for every match.',
-      shape: {
-        path: z.string().describe('Absolute path to the file (~ allowed).'),
-        find: z.string().describe('Exact text to find.'),
-        replace: z.string().describe('Replacement text.'),
-        all: z.boolean().optional().describe('Replace every occurrence (default false = first only).'),
-      },
+      name: 'edit_file', risk: 'write',
+      description: 'Find and replace text inside an existing file. First match by default; all=true for every match.',
+      shape: {path: z.string(), find: z.string(), replace: z.string(), all: z.boolean().optional()},
       summarize: a => ({title: 'Edit a file', detail: `${abs(a.path)}\n\nreplace:\n${a.find.slice(0, 500)}\n\nwith:\n${a.replace.slice(0, 500)}`}),
       run: async ({path, find, replace, all}) => {
         const p = abs(path);
@@ -204,80 +204,70 @@ Get-CimInstance Win32_LogicalDisk -Filter "DriveType=3" | ForEach-Object { "Disk
         const before = readFileSync(p, 'utf8');
         if (!before.includes(find)) return fail(`Text not found in ${p}; nothing changed.`);
         const after = all ? before.split(find).join(replace) : before.replace(find, replace);
-        const count = all ? before.split(find).length - 1 : 1;
         writeFileSync(p, after, 'utf8');
-        return text(`Replaced ${count} occurrence(s) in ${p}.`);
+        return text(`Replaced ${all ? before.split(find).length - 1 : 1} occurrence(s) in ${p}.`);
       },
     },
     {
-      name: 'manage_path',
-      risk: 'write',
+      name: 'manage_path', risk: 'write',
       description: 'File/folder housekeeping: create a folder, move/rename, copy, or delete a file or folder.',
-      shape: {
-        action: z.enum(['mkdir', 'move', 'copy', 'delete']).describe('What to do.'),
-        path: z.string().describe('The target path (source, for move/copy).'),
-        to: z.string().optional().describe('Destination path (required for move/copy).'),
-      },
+      shape: {action: z.enum(['mkdir', 'move', 'copy', 'delete']), path: z.string(), to: z.string().optional()},
       summarize: a => ({title: `File action: ${a.action}`, detail: a.to ? `${abs(a.path)}  ->  ${abs(a.to)}` : abs(a.path)}),
       run: async ({action, path, to}) => {
         const p = abs(path);
         if (action === 'mkdir') { mkdirSync(p, {recursive: true}); return text(`Created folder ${p}.`); }
-        if (action === 'delete') {
-          if (!existsSync(p)) return fail(`No such path: ${p}`);
-          rmSync(p, {recursive: true, force: true}); return text(`Deleted ${p}.`);
-        }
+        if (action === 'delete') { if (!existsSync(p)) return fail(`No such path: ${p}`); rmSync(p, {recursive: true, force: true}); return text(`Deleted ${p}.`); }
         if (!to) return fail(`"to" is required for ${action}.`);
         const d = abs(to);
         if (!existsSync(p)) return fail(`No such source: ${p}`);
         mkdirSync(dirname(d), {recursive: true});
         if (action === 'move') { renameSync(p, d); return text(`Moved ${p} -> ${d}.`); }
-        // copy (via PowerShell for folder support)
-        await ps(`Copy-Item -LiteralPath '${p.replace(/'/g, "''")}' -Destination '${d.replace(/'/g, "''")}' -Recurse -Force`);
-        return text(`Copied ${p} -> ${d}.`);
+        cpSync(p, d, {recursive: true}); return text(`Copied ${p} -> ${d}.`);
       },
     },
 
     // ---- exec: processes, launching, screen ------------------------------
     {
-      name: 'kill_process',
-      risk: 'exec',
-      description: 'Stop a running process by its PID or by name (stops all matching that name).',
-      shape: {
-        pid: z.number().optional().describe('Process id to stop.'),
-        name: z.string().optional().describe('Process name to stop (all matches), e.g. notepad.'),
-      },
+      name: 'kill_process', risk: 'exec',
+      description: 'Stop a running process by PID or by name (all matching).',
+      shape: {pid: z.number().optional(), name: z.string().optional()},
       summarize: a => ({title: 'Stop a process', detail: a.pid ? `PID ${a.pid}` : `name: ${a.name}`}),
       run: async ({pid, name}) => {
         if (!pid && !name) return fail('Give a pid or a name.');
-        const cmd = pid ? `Stop-Process -Id ${pid} -Force -PassThru | Select-Object Id,ProcessName`
-          : `Stop-Process -Name '${String(name).replace(/'/g, "''")}' -Force -PassThru | Select-Object Id,ProcessName`;
-        const r = await ps(cmd);
+        const cmd = isWin
+          ? (pid ? `Stop-Process -Id ${pid} -Force -PassThru | Select-Object Id,ProcessName` : `Stop-Process -Name '${String(name).replace(/'/g, "''")}' -Force -PassThru | Select-Object Id,ProcessName`)
+          : (pid ? `kill -9 ${pid} && echo "killed ${pid}"` : `pkill -f '${String(name).replace(/'/g, "'\\''")}' && echo "killed ${name}"`);
+        const r = await sh(cmd);
         return r.err && !r.out ? fail(r.err) : text(r.out || 'Stopped.');
       },
     },
     {
-      name: 'open_path',
-      risk: 'exec',
-      description: 'Open a file, folder, app, or URL with its default handler (like double-clicking it). e.g. a URL in the browser, a .docx in Word, Explorer for a folder.',
-      shape: {target: z.string().describe('A file path, folder, app name, or URL (http/https).')},
+      name: 'open_path', risk: 'exec',
+      description: 'Open a file, folder, app, or URL with its default handler (like double-clicking it).',
+      shape: {target: z.string().describe('A file path, folder, app, or URL.')},
       summarize: a => ({title: 'Open something', detail: a.target}),
       run: async ({target}) => {
         const t = /^https?:\/\//i.test(target) ? target : abs(target);
-        await ps(`Start-Process '${t.replace(/'/g, "''")}'`, {timeoutMs: 15000});
+        const q = t.replace(/'/g, isWin ? "''" : "'\\''");
+        const cmd = isWin ? `Start-Process '${q}'` : isMac ? `open '${q}'` : `xdg-open '${q}'`;
+        await sh(cmd, {timeoutMs: 15000});
         return text(`Opened ${target}.`);
       },
     },
     {
-      name: 'screenshot',
-      risk: 'exec',
-      description: 'Capture the PC screen right now and return it as an image, so you can SEE what is on screen. Use when the user asks what is on their screen, or to verify a visual result.',
+      name: 'screenshot', risk: 'exec',
+      description: 'Capture the screen right now and return it as an image, so you can SEE what is on screen.',
       shape: {},
-      summarize: () => ({title: 'Capture the screen', detail: 'Takes a screenshot of the desktop and sends it to ChatGPT.'}),
+      summarize: () => ({title: 'Capture the screen', detail: 'Takes a screenshot and sends it to ChatGPT.'}),
       run: async () => {
         const dir = mkdtempSync(join(tmpdir(), 'pc-shot-'));
         const out = join(dir, 'shot.png');
-        await ps(`& '${SHOT.replace(/'/g, "''")}' -Out '${out.replace(/'/g, "''")}'`, {timeoutMs: 20000});
-        if (!existsSync(out)) { try { rmSync(dir, {recursive: true, force: true}); } catch {} return fail('Could not capture the screen (is anyone logged in?).'); }
+        const q = out.replace(/'/g, isWin ? "''" : "'\\''");
+        const cmd = isWin ? `& '${SHOT.replace(/'/g, "''")}' -Out '${q}'`
+          : isMac ? `screencapture -x '${q}'`
+          : `(command -v scrot >/dev/null && scrot '${q}') || (command -v import >/dev/null && import -window root '${q}') || (command -v gnome-screenshot >/dev/null && gnome-screenshot -f '${q}')`;
+        try { await sh(cmd, {timeoutMs: 20000}); } catch {}
+        if (!existsSync(out)) { try { rmSync(dir, {recursive: true, force: true}); } catch {} return fail('Could not capture the screen (no display, or no screenshot tool installed).'); }
         const b64 = readFileSync(out).toString('base64');
         try { rmSync(dir, {recursive: true, force: true}); } catch {}
         return {content: [{type: 'image', data: b64, mimeType: 'image/png'}, {type: 'text', text: 'Screenshot captured.'}]};

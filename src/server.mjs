@@ -14,13 +14,22 @@ import {requestApproval, autoApproved} from './approve.mjs';
 import {createLog} from './log.mjs';
 import {makeTools} from './tools.mjs';
 import {makeRemoteTools} from './remote.mjs';
+import {makeJobTools} from './jobs.mjs';
+import {makeGuiTools} from './gui.mjs';
+import {loadGuard, assess} from './guard.mjs';
 
-const VERSION = '0.4.0';
+const VERSION = '0.5.0';
 const config = loadConfig();
 const log = createLog(join(ROOT, 'logs', 'connector.log'));
 const SETTINGS = readFileSync(new URL('./settings.html', import.meta.url), 'utf8');
 const modeFile = join(config.dataDir, 'mode.json');
-const tools = [...makeTools(config), ...makeRemoteTools(config)];
+const guard = loadGuard(config.dataDir);
+const tools = [...makeTools(config), ...makeRemoteTools(config), ...makeJobTools(config), ...makeGuiTools()];
+
+// Simple rate limiter: cap tool invocations per rolling minute (runaway-loop guard).
+const MAX_PER_MIN = config.maxPerMinute || 120;
+const hits = [];
+function rateOk() { const now = Date.now(); while (hits.length && now - hits[0] > 60000) hits.shift(); if (hits.length >= MAX_PER_MIN) return false; hits.push(now); return true; }
 const recent = [];
 
 function currentMode() {
@@ -40,15 +49,26 @@ function buildServer() {
   const server = new McpServer({name: 'pc-connector', version: VERSION});
   for (const tool of tools) {
     server.tool(tool.name, tool.description, tool.shape, async (args) => {
+      if (!rateOk()) return {isError: true, content: [{type: 'text', text: `Rate limit: more than ${MAX_PER_MIN} actions in a minute. Pausing to avoid a runaway loop — slow down or wait a moment.`}]};
       const mode = currentMode();
-      const {title, detail} = tool.summarize(args);
+      let {title, detail} = tool.summarize(args);
+
+      // Safety guard: can hard-block catastrophic actions or force a confirmation.
+      const g = assess(tool, args, guard);
+      if (g.level === 'block') {
+        recent.unshift({t: Date.now(), tool: tool.name, command: '⛔ ' + title, mode, decision: 'denied'}); recent.length = Math.min(recent.length, 50);
+        log('blocked', {tool: tool.name, reason: g.reason});
+        return {isError: true, content: [{type: 'text', text: 'BLOCKED by safety guard. ' + g.reason}]};
+      }
+      if (g.level === 'confirm') detail = '⚠ ' + g.reason + '\n\n' + (detail || '');
+
       // read-only tools never change the machine -> run straight away.
-      // write/exec wait for a click unless the user chose "always".
-      const auto = tool.risk === 'read' || mode === 'always'
-        || (tool.name === 'run_command' && autoApproved(args.command || '', config.autoApprove));
+      // write/exec wait for a click unless Always-allow. A guard "confirm" always prompts.
+      const auto = g.level !== 'confirm' && (tool.risk === 'read' || mode === 'always'
+        || (tool.name === 'run_command' && autoApproved(args.command || '', config.autoApprove)));
       const entry = {t: Date.now(), tool: tool.name, command: title + (detail ? ' — ' + String(detail).replace(/\s+/g, ' ').slice(0, 160) : ''), mode, decision: auto ? 'auto' : 'pending'};
       recent.unshift(entry); recent.length = Math.min(recent.length, 50);
-      log('request', {tool: tool.name, title, mode, risk: tool.risk, auto});
+      log('request', {tool: tool.name, title, mode, risk: tool.risk, auto, guard: g.level});
 
       if (!auto) {
         const decision = await requestApproval({title, detail, cwd: args.cwd, timeoutMs: config.approvalTimeoutMs});

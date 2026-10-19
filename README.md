@@ -68,8 +68,12 @@ PC Commander gives ChatGPT a real toolbox, not just a command line. Each tool is
 | `open_path` | Open a file, folder, app, or website | 🔵 |
 | `kill_process` | Stop a frozen or unwanted program | 🔵 |
 | `screenshot` | Capture the screen so ChatGPT can **see** it | 🔵 |
+| `start_job` · `job_status` · `list_jobs` · `stop_job` | Run **long tasks in the background** (builds, downloads, servers) and check progress | 🔵🟢 |
+| `move_mouse` · `mouse_click` · `type_text` · `press_keys` · `scroll` | **Control the mouse & keyboard** — operate any app, not just the terminal | 🔵 |
 
 > By default, 🟢 reads happen instantly (they're harmless) while 🟡/🔵 actions wait for your **Approve** — so ChatGPT can freely *look around*, but never *change* anything without your okay. Switch to **Always allow** on the settings page for fully hands‑off.
+
+> 👀 **See-and-click:** `screenshot` + `move_mouse`/`mouse_click`/`type_text` let ChatGPT look at your screen and then operate apps — open a program, click buttons, fill a form. (Mouse/keyboard control is Windows‑only for now.)
 
 ---
 
@@ -99,7 +103,7 @@ PC Commander isn't limited to the PC it runs on. Tell it about your servers once
 
 | | |
 |---|---|
-| 🖥️ **A Windows PC** | The computer you want to control. (You can *talk* to it from your phone or a Mac — but the computer being controlled has to be Windows.) |
+| 🖥️ **A PC to control** | **Windows** is fully supported. **macOS & Linux** work too for the core (shell, files, system info, background jobs, SSH) — the screen/mouse tools are Windows‑only for now. You can *talk* to it from any device (phone, Mac, web). |
 | ⏱️ **About 10 minutes** | One-time setup. After that it runs by itself. |
 | 💬 **A ChatGPT account** | One that lets you add "connectors" (a connector is just a plug-in that lets ChatGPT talk to your PC). |
 | 🌐 **A website address you own** *(optional)* | If you have one (like `yourname.com`), you get a permanent link that never changes. No domain? You can still use the free temporary option. |
@@ -241,6 +245,8 @@ There are two separate "are you sure?" checks, and that's on purpose:
 
 Yes — and here's why, in plain terms:
 
+- **A safety guard that can't be overridden.** Even in "Always allow", PC Commander **refuses** catastrophic actions (wiping a drive, deleting Windows, `rm -rf /`) and **forces a confirmation** for sensitive ones (shutdown, user accounts, firewall). It won't touch system folders. You can tighten it further in `data/guard.json`.
+- **A runaway-loop brake.** If the agent tries more than ~120 actions a minute, it's throttled — so a bad loop can't run wild.
 - **You approve everything.** Even if someone somehow got your link, nothing would run on your PC until *you* clicked Approve on your own screen.
 - **Only you have the link.** It contains a long secret code. Don't share it or post it anywhere, and you're the only one who can get in.
 - **It's your computer, your rules.** It only listens to your private link — it's not open to the internet, and there are no doors left unlocked.
@@ -273,21 +279,30 @@ PC Commander is a small [Model Context Protocol](https://modelcontextprotocol.io
 
 ```
 src/
-  server.mjs      MCP server; run_command tool; /health, settings + mode API
-  exec.mjs        runs a command in PowerShell, captures stdout/stderr/exit code
-  approve.mjs     spawns the approval dialog; returns approved/denied/timeout
-  approve.ps1     the topmost Approve/Deny dialog with a countdown
+  server.mjs      MCP server; registers all tools; risk+guard+rate-limit; /health, settings API
+  tools.mjs       core tools (files, search, system, screenshot) — cross-platform
+  remote.mjs      SSH / SCP / WinRM / RDP + saved-server registry
+  jobs.mjs        background jobs (start/status/list/stop)
+  gui.mjs/.ps1    mouse & keyboard control (Windows)
+  guard.mjs       safety guard: block catastrophic, confirm sensitive, protect system dirs
+  shell.mjs       per-OS shell selection (PowerShell / sh)
+  exec.mjs        runs a command in the OS shell, captures stdout/stderr/exit code
+  approve.mjs/.ps1  the topmost Approve/Deny dialog with a countdown
+  screenshot.ps1  screen capture (Windows)
   config.mjs      defaults + generates data/token.txt
   log.mjs         JSONL logging
   run.mjs         quick-start launcher (server + temporary tunnel)
-  settings.html   the Ask / Always-allow page
+  settings.html   the Ask / Always-allow page + capability list
 scripts/
   install.ps1       deps + key + auto-start the server at logon
   setup-domain.ps1  named Cloudflare tunnel + permanent URL + auto-start the tunnel
+  rotate-key.ps1    generate a new key and restart
   autostart/*.vbs   windowless launchers used by the Startup shortcuts
 cloudflared/
   pc-commands.example.yml   template (your real one is generated & gitignored)
 ```
+
+Config knobs live in `data/config.json` (`maxPerMinute`, timeouts, `autoApprove`) and `data/guard.json` (`enabled`, `protectedPaths`, `allowedRoots`, extra `block`/`confirm` patterns).
 
 Run `npm start` to launch just the server, `npm run quick` for server + temporary tunnel. PRs welcome.
 
