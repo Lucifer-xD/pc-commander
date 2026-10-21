@@ -1,6 +1,6 @@
 {
   "name": "pc-commander",
-  "version": "1.11.0",
+  "version": "1.12.0",
   "description": "Run commands on your own PC from ChatGPT, over a private self-hosted MCP connector, gated by a local Approve dialog.",
   "type": "module",
   "license": "MIT",

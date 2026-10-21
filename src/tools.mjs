@@ -21,6 +21,48 @@ const home = () => process.env.USERPROFILE || homedir();
 const abs = p => resolve(String(p).replace(/^~(?=[\\/]|$)/, home()));
 const human = n => n < 1024 ? n + ' B' : n < 1048576 ? (n / 1024).toFixed(1) + ' KB' : n < 1073741824 ? (n / 1048576).toFixed(1) + ' MB' : (n / 1073741824).toFixed(2) + ' GB';
 const CAP = 200000;
+
+// Paging. ChatGPT (and other MCP hosts) clip long tool results in the MIDDLE before the
+// model sees them, so a 60 KB file arrives with its centre missing. Big outputs are
+// therefore returned one page at a time, with an explicit "next offset" hint.
+const DEFAULT_PAGE = 12000;
+const MAX_PAGE = 40000;
+
+/** Cut text[offset, offset+length) at a line break near the end when one is close. */
+function pageOf(textAll, offset, length) {
+  const total = textAll.length;
+  const start = Math.max(0, Math.min(Math.floor(offset) || 0, total));
+  let end = Math.min(total, start + length);
+  if (end < total) {
+    const nl = textAll.lastIndexOf('\n', end);
+    if (nl > start + Math.floor(length * 0.8)) end = nl + 1;
+  }
+  return {start, end, total, chunk: textAll.slice(start, end)};
+}
+
+/** Footer telling the model exactly how to get the rest. */
+function pageFooter({start, end, total}, how) {
+  if (end >= total) return start > 0 ? `\n[end — this was the last page, characters ${start}–${end} of ${total}]` : '';
+  return `\n[page: characters ${start}–${end} of ${total} · ${total - end} more — ${how(end)}]`;
+}
+
+// The continuation also travels in the PATH ("C:\file.txt::12000", "pc-output://out_x::12000"),
+// because MCP hosts such as ChatGPT cache the tool schema and may not know the offset parameter.
+function splitPathOffset(raw) {
+  const m = String(raw).match(/^(.*)::(\d+)$/);
+  return m ? {path: m[1], offset: Number(m[2])} : {path: String(raw), offset: undefined};
+}
+const OUTPUT_SCHEME = 'pc-output://';
+
+// run_command output that did not fit one page, kept for read_output (newest 30, 30 min).
+const outputs = new Map();
+function keepOutput(textAll) {
+  const id = 'out_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  outputs.set(id, {text: textAll, at: Date.now()});
+  for (const [k, v] of outputs) if (Date.now() - v.at > 30 * 60_000) outputs.delete(k);
+  while (outputs.size > 30) outputs.delete(outputs.keys().next().value);
+  return id;
+}
 const wildToRe = g => new RegExp('^' + g.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*').replace(/\?/g, '.') + '$', 'i');
 
 async function sh(command, {timeoutMs = 60000} = {}) {
@@ -71,26 +113,69 @@ export function makeTools(config) {
         if (r.stdout.trim()) parts.push('--- stdout ---\n' + r.stdout.trimEnd());
         if (r.stderr.trim()) parts.push('--- stderr ---\n' + r.stderr.trimEnd());
         if (!r.stdout.trim() && !r.stderr.trim()) parts.push('(no output)');
-        return text(parts.join('\n'));
+        const all = parts.join('\n');
+        const page = config.pageChars || DEFAULT_PAGE;
+        if (all.length <= page) return text(all);
+        // long output: first page now, the rest via read_output
+        const id = keepOutput(all);
+        const pg = pageOf(all, 0, page);
+        return text(pg.chunk + pageFooter(pg, (next) => `call read_file with path="${OUTPUT_SCHEME}${id}::${next}" for the next page`));
       },
     },
 
     // ---- read: files & folders (portable) --------------------------------
     {
       name: 'read_file', risk: 'read',
-      description: 'Read a text file on the computer and return its contents.',
-      shape: {path: z.string().describe('Absolute path (~ allowed).'), max_bytes: z.number().optional()},
-      summarize: a => ({title: 'Read a file', detail: a.path}),
-      run: async ({path, max_bytes}) => {
-        const p = abs(path);
+      description:
+        'Read a text file on the computer. Large files are returned one PAGE at a time (default 12,000 characters): ' +
+        'the reply ends with "[page: characters A–B of N · … call read_file with path=\\"<file>::B\\" …]" — call read_file again ' +
+        'exactly as the footer says (the "::B" suffix is the offset; the offset parameter works too) until it says "[end …]". ' +
+        'Read every page when the whole file matters; do not assume the rest. Long run_command output continues the same way.',
+      shape: {
+        path: z.string().describe('Absolute path (~ allowed).'),
+        offset: z.number().optional().describe('Character offset to start from (0 = beginning). Use the offset from the previous page footer.'),
+        length: z.number().optional().describe(`Characters to return (default ${DEFAULT_PAGE}, max ${MAX_PAGE}).`),
+        max_bytes: z.number().optional().describe('Deprecated alias of length.'),
+      },
+      summarize: a => ({title: 'Read a file', detail: `${a.path}${a.offset ? `  (from ${a.offset})` : ''}`}),
+      run: async ({path, offset, length, max_bytes}) => {
+        const sp = splitPathOffset(path);
+        const off = offset ?? sp.offset ?? 0;
+        const len = Math.max(1, Math.min(Math.floor(length || max_bytes || config.pageChars || DEFAULT_PAGE), MAX_PAGE));
+        // a long run_command output, continued through read_file
+        if (sp.path.startsWith(OUTPUT_SCHEME)) {
+          const id = sp.path.slice(OUTPUT_SCHEME.length);
+          const o = outputs.get(id);
+          if (!o) return fail(`Unknown or expired output "${id}" (outputs are kept 30 minutes). Re-run the command.`);
+          const pg = pageOf(o.text, off, len);
+          return text(pg.chunk + pageFooter(pg, (next) => `call read_file with path="${OUTPUT_SCHEME}${id}::${next}" for the next page`));
+        }
+        const p = abs(sp.path);
         if (!existsSync(p)) return fail(`No such file: ${p}`);
         const st = statSync(p);
         if (st.isDirectory()) return fail(`${p} is a folder — use list_dir.`);
-        let data = readFileSync(p, 'utf8');
-        const cap = Math.min(max_bytes || CAP, CAP);
-        const truncated = data.length > cap;
-        if (truncated) data = data.slice(0, cap);
-        return text(`${p}  (${human(st.size)}${truncated ? ', truncated' : ''})\n\n${data}`);
+        const data = readFileSync(p, 'utf8');
+        const pg = pageOf(data, off, len);
+        if (pg.start >= pg.total && pg.total > 0) return fail(`offset ${pg.start} is past the end of ${p} (${pg.total} characters).`);
+        const head = pg.end - pg.start < pg.total ? `${p}  (${human(st.size)}, ${pg.total} characters — showing ${pg.start}–${pg.end})` : `${p}  (${human(st.size)})`;
+        return text(`${head}\n\n${pg.chunk}${pageFooter(pg, (next) => `call read_file with path="${p}::${next}" for the next page`)}`);
+      },
+    },
+    {
+      name: 'read_output', risk: 'read',
+      description: 'Read the next page of a long run_command output. Use the output_id and offset from the "[page: …]" footer of run_command.',
+      shape: {
+        output_id: z.string().describe('The output_id from the run_command footer.'),
+        offset: z.number().describe('Character offset from the previous footer.'),
+        length: z.number().optional().describe(`Characters to return (default ${DEFAULT_PAGE}, max ${MAX_PAGE}).`),
+      },
+      summarize: a => ({title: 'Read command output', detail: `${a.output_id} from ${a.offset}`}),
+      run: async ({output_id, offset, length}) => {
+        const o = outputs.get(output_id);
+        if (!o) return fail(`Unknown or expired output_id "${output_id}" (outputs are kept 30 minutes). Re-run the command.`);
+        const len = Math.max(1, Math.min(Math.floor(length || config.pageChars || DEFAULT_PAGE), MAX_PAGE));
+        const pg = pageOf(o.text, offset, len);
+        return text(pg.chunk + pageFooter(pg, (next) => `call read_file with path="${OUTPUT_SCHEME}${output_id}::${next}" for the next page`));
       },
     },
     {

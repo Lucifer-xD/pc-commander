@@ -55,7 +55,8 @@ PC Commander gives ChatGPT a real toolbox, not just a command line. Each tool is
 
 | Tool | What it does | |
 |---|---|---|
-| `read_file` | Read any text file | 🟢 |
+| `read_file` | Read any text file — big files come **one page at a time** (12,000 characters, with a "next offset" hint) so ChatGPT never loses the middle | 🟢 |
+| `read_output` | Read the next page of a long `run_command` output | 🟢 |
 | `list_dir` | List what's in a folder | 🟢 |
 | `find_files` | Find files by name (e.g. all your PDFs) | 🟢 |
 | `search_in_files` | Search *inside* files for text | 🟢 |
