@@ -16,6 +16,7 @@ import {makeTools} from './tools.mjs';
 import {makeRemoteTools} from './remote.mjs';
 import {makeJobTools, initJobs} from './jobs.mjs';
 import {makeGuiTools} from './gui.mjs';
+import {makeComputerTools} from './computer.mjs';
 import {makeMemoryTools} from './memory.mjs';
 import {makeWebTools} from './web.mjs';
 import {makeNotifyTools} from './notify.mjs';
@@ -30,7 +31,7 @@ import {makeSubagentTools} from './subagents.mjs';
 import {loadGuard, assess} from './guard.mjs';
 import {z} from 'zod';
 
-const VERSION = '0.9.0';
+const VERSION = '1.13.0';
 const config = loadConfig();
 const log = createLog(join(ROOT, 'logs', 'connector.log'));
 const SETTINGS = readFileSync(new URL('./settings.html', import.meta.url), 'utf8');
@@ -50,7 +51,7 @@ const controlTools = [{
 }];
 
 const baseTools = [
-  ...makeTools(config), ...makeRemoteTools(config), ...makeJobTools(config), ...makeGuiTools(),
+  ...makeTools(config), ...makeRemoteTools(config), ...makeJobTools(config), ...makeGuiTools(), ...makeComputerTools(config),
   ...makeMemoryTools(config), ...makeWebTools(config), ...makeNotifyTools(config), ...makeExtraTools(), ...makeSchedulerTools(),
   ...makeUndoTools(), ...makeSecretTools(config), ...makeDevTools(config), ...makeBrowserTools(config), ...controlTools,
 ];

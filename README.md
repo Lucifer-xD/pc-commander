@@ -71,8 +71,12 @@ PC Commander gives ChatGPT a real toolbox, not just a command line. Each tool is
 | `screenshot` | Capture the screen so ChatGPT can **see** it | 🔵 |
 | `start_job` · `job_status` · `list_jobs` · `stop_job` | Run **long tasks in the background** (builds, downloads, servers) and check progress | 🔵🟢 |
 | `move_mouse` · `mouse_click` · `type_text` · `press_keys` · `scroll` | **Control the mouse & keyboard** — operate any app, not just the terminal | 🔵 |
+| `list_apps` · `app_state` · `app_click` · `app_type` · `app_key` · `app_set_value` · `app_scroll` · `app_drag` · `app_action` | **Computer use** — read an app's window as a screenshot plus a numbered list of its buttons, fields and menus, then act on a control by its number. Works on apps in the background | 🟢🔵 |
+| `list_windows` · `window_control` · `launch_app` | **Windows & apps** — list open windows; focus, minimize, maximize, restore, move/resize or close one; start any app by name (Store apps too) | 🟢🔵 |
 
 > By default, 🟢 reads happen instantly (they're harmless) while 🟡/🔵 actions wait for your **Approve** — so ChatGPT can freely *look around*, but never *change* anything without your okay. Switch to **Always allow** on the settings page for fully hands‑off.
+
+> 🖱️ **Computer use (recommended for apps):** `list_apps` → `app_state` → `app_click` / `app_set_value` / `app_key` → `app_state` again. ChatGPT clicks a button by its *name and number* instead of guessing pixel positions, which is far more reliable, and the app can stay in the background. Powered by the open-source [open-computer-use](https://github.com/iFurySt/open-computer-use) engine (MIT): install it once with `npm i -g open-computer-use`. Long control lists are paged like long files.
 
 > 👀 **See-and-click:** `screenshot` + `move_mouse`/`mouse_click`/`type_text` let ChatGPT look at your screen and then operate apps — open a program, click buttons, fill a form. (Mouse/keyboard control is Windows‑only for now.)
 
@@ -367,6 +371,8 @@ src/
   extra.mjs       clipboard, keep_awake, screen_size
   keepawake.mjs   stops the PC sleeping while jobs run
   gui.mjs/.ps1    mouse & keyboard control (Windows)
+  computer.mjs    computer use by accessibility (bridge to the open-computer-use engine) + window tools
+  windows.ps1     list / focus / minimize / maximize / move / close windows, launch apps (Windows)
   guard.mjs       safety guard: block catastrophic, confirm sensitive, protect system dirs
   shell.mjs       per-OS shell selection (PowerShell / sh)
   exec.mjs        runs a command in the OS shell, captures stdout/stderr/exit code

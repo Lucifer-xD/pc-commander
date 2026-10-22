@@ -25,11 +25,11 @@ const CAP = 200000;
 // Paging. ChatGPT (and other MCP hosts) clip long tool results in the MIDDLE before the
 // model sees them, so a 60 KB file arrives with its centre missing. Big outputs are
 // therefore returned one page at a time, with an explicit "next offset" hint.
-const DEFAULT_PAGE = 12000;
+export const DEFAULT_PAGE = 12000;
 const MAX_PAGE = 40000;
 
 /** Cut text[offset, offset+length) at a line break near the end when one is close. */
-function pageOf(textAll, offset, length) {
+export function pageOf(textAll, offset, length) {
   const total = textAll.length;
   const start = Math.max(0, Math.min(Math.floor(offset) || 0, total));
   let end = Math.min(total, start + length);
@@ -41,7 +41,7 @@ function pageOf(textAll, offset, length) {
 }
 
 /** Footer telling the model exactly how to get the rest. */
-function pageFooter({start, end, total}, how) {
+export function pageFooter({start, end, total}, how) {
   if (end >= total) return start > 0 ? `\n[end — this was the last page, characters ${start}–${end} of ${total}]` : '';
   return `\n[page: characters ${start}–${end} of ${total} · ${total - end} more — ${how(end)}]`;
 }
@@ -52,11 +52,11 @@ function splitPathOffset(raw) {
   const m = String(raw).match(/^(.*)::(\d+)$/);
   return m ? {path: m[1], offset: Number(m[2])} : {path: String(raw), offset: undefined};
 }
-const OUTPUT_SCHEME = 'pc-output://';
+export const OUTPUT_SCHEME = 'pc-output://';
 
 // run_command output that did not fit one page, kept for read_output (newest 30, 30 min).
 const outputs = new Map();
-function keepOutput(textAll) {
+export function keepOutput(textAll) {
   const id = 'out_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
   outputs.set(id, {text: textAll, at: Date.now()});
   for (const [k, v] of outputs) if (Date.now() - v.at > 30 * 60_000) outputs.delete(k);
